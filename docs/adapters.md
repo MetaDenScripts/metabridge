@@ -35,7 +35,7 @@ Resource: `qbx_core`
 
 ## Custom Overrides
 If your resource names or exports differ, override using:
-- `Bridge.register(methodName, handler)`
+- `MetaBridge.register(methodName, handler)`
 - `BridgeConfig.fuel.set`
 - `BridgeConfig.keys.give`
 - `BridgeConfig.keysClient.give`

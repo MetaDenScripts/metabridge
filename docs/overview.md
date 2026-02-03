@@ -1,4 +1,4 @@
-# Bridge Overview
+# MetaBridge Overview
 
 This bridge provides a **single, stable API** for **qbcore**, **esx**, and **qbox** so your scripts can call one function and receive the correct framework-specific data without manual branching.
 
@@ -17,13 +17,13 @@ Detection is done via resource state checks:
 If you want to force a framework, set `BridgeConfig.framework`.
 
 ## File Layout (Why Each File Exists)
-- `bridge/bridge.lua`: server dispatcher (`Bridge.call`) + server helpers.
-- `bridge/client.lua`: client helpers (`BridgeClient.*`) for fuel/keys.
+- `bridge/bridge.lua`: server dispatcher (`MetaBridge.call`) + server helpers.
+- `bridge/client.lua`: client helpers (`MetaBridgeClient.*`) for fuel/keys.
 - `bridge/shared.lua`: detection helpers and shared utilities.
 - `bridge/adapters/*.lua`: framework-specific logic mapped to the same API.
 
 ## Typical Flow
-1. Your script calls `Bridge.getIdentifier(source)`.
+1. Your script calls `MetaBridge.getIdentifier(source)`.
 2. The bridge determines the framework.
 3. The correct adapter runs (qbcore/esx/qbox).
 4. The identifier is returned in the same format, regardless of framework.
@@ -31,13 +31,13 @@ If you want to force a framework, set `BridgeConfig.framework`.
 ## Quick Start
 Server:
 ```lua
-local framework = Bridge.getFramework()
-local identifier = Bridge.getIdentifier(source)
-local job = Bridge.getJob(source)
+local framework = MetaBridge.getFramework()
+local identifier = MetaBridge.getIdentifier(source)
+local job = MetaBridge.getJob(source)
 ```
 
 Client:
 ```lua
-BridgeClient.setFuel(vehicle, 75.0)
-BridgeClient.giveVehicleKeys(GetVehicleNumberPlateText(vehicle))
+MetaBridgeClient.setFuel(vehicle, 75.0)
+MetaBridgeClient.giveVehicleKeys(GetVehicleNumberPlateText(vehicle))
 ```

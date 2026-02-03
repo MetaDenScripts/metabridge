@@ -1,4 +1,4 @@
-BridgeClient = BridgeClient or {}
+MetaBridgeClient = MetaBridgeClient or {}
 
 local function getResourceExport(resourceName, methodName)
     if not exports or not exports[resourceName] then
@@ -16,7 +16,7 @@ local function getResourceExport(resourceName, methodName)
     end
 end
 
-function BridgeClient.getFramework()
+function MetaBridgeClient.getFramework()
     if BridgeShared and BridgeShared.detectFramework then
         return BridgeShared.detectFramework()
     end
@@ -24,11 +24,11 @@ function BridgeClient.getFramework()
     return nil
 end
 
-function BridgeClient.isReady()
-    return BridgeClient.getFramework() ~= nil
+function MetaBridgeClient.isReady()
+    return MetaBridgeClient.getFramework() ~= nil
 end
 
-function BridgeClient.setFuel(vehicle, fuel)
+function MetaBridgeClient.setFuel(vehicle, fuel)
     if BridgeConfig and BridgeConfig.fuel and BridgeConfig.fuel.set then
         return BridgeConfig.fuel.set(vehicle, fuel)
     end
@@ -49,12 +49,12 @@ function BridgeClient.setFuel(vehicle, fuel)
     return false
 end
 
-function BridgeClient.giveVehicleKeys(plate)
+function MetaBridgeClient.giveVehicleKeys(plate)
     if BridgeConfig and BridgeConfig.keysClient and BridgeConfig.keysClient.give then
         return BridgeConfig.keysClient.give(plate)
     end
 
-    TriggerServerEvent('Bridge:giveVehicleKeys', plate)
+    TriggerServerEvent('MetaBridge:giveVehicleKeys', plate)
     return true
 end
 
@@ -66,7 +66,7 @@ local function toModelHash(model)
     return GetHashKey(model)
 end
 
-function BridgeClient.requestModel(model, timeoutMs)
+local function requestModel(model, timeoutMs)
     local modelHash = toModelHash(model)
     if not IsModelInCdimage(modelHash) then
         return false
@@ -87,7 +87,7 @@ function BridgeClient.requestModel(model, timeoutMs)
     return true
 end
 
-function BridgeClient.setModelAsNoLongerNeeded(model)
+local function setModelAsNoLongerNeeded(model)
     local modelHash = toModelHash(model)
     if not IsModelInCdimage(modelHash) then
         return false
@@ -97,29 +97,29 @@ function BridgeClient.setModelAsNoLongerNeeded(model)
     return true
 end
 
-function BridgeClient.spawnPed(model, coords, heading, networked)
-    if not BridgeClient.requestModel(model) then
+function MetaBridgeClient.spawnPed(model, coords, heading, networked)
+    if not requestModel(model) then
         return nil
     end
 
     local modelHash = toModelHash(model)
     local ped = CreatePed(4, modelHash, coords.x, coords.y, coords.z, heading or 0.0, networked == true, false)
-    BridgeClient.setModelAsNoLongerNeeded(modelHash)
+    setModelAsNoLongerNeeded(modelHash)
     return ped
 end
 
-function BridgeClient.spawnVehicle(model, coords, heading, networked)
-    if not BridgeClient.requestModel(model) then
+function MetaBridgeClient.spawnVehicle(model, coords, heading, networked)
+    if not requestModel(model) then
         return nil
     end
 
     local modelHash = toModelHash(model)
     local vehicle = CreateVehicle(modelHash, coords.x, coords.y, coords.z, heading or 0.0, networked == true, false)
-    BridgeClient.setModelAsNoLongerNeeded(modelHash)
+    setModelAsNoLongerNeeded(modelHash)
     return vehicle
 end
 
-function BridgeClient.setEntityAsNoLongerNeeded(entity)
+function MetaBridgeClient.setEntityAsNoLongerNeeded(entity)
     if not entity or entity == 0 then
         return false
     end
