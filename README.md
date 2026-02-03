@@ -16,6 +16,13 @@ A lightweight FiveM bridge to support **qbcore**, **esx**, and **qbox** with a s
 ensure metaden-scripts-bridge
 ```
 
+## Documentation
+- `docs/overview.md`
+- `docs/server-api.md`
+- `docs/client-api.md`
+- `docs/configuration.md`
+- `docs/adapters.md`
+
 ## Usage (Server)
 ```lua
 local framework = Bridge.getFramework()
@@ -54,6 +61,11 @@ Client helpers:
 - `BridgeClient.getFramework()`
 - `BridgeClient.setFuel(vehicle, fuel)`
 - `BridgeClient.giveVehicleKeys(plate)`
+- `BridgeClient.requestModel(model, timeoutMs)`
+- `BridgeClient.setModelAsNoLongerNeeded(model)`
+- `BridgeClient.spawnPed(model, coords, heading, networked)`
+- `BridgeClient.spawnVehicle(model, coords, heading, networked)`
+- `BridgeClient.setEntityAsNoLongerNeeded(entity)`
 
 ## Configuration
 Override detection if you want to force a framework:
