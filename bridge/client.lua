@@ -57,3 +57,73 @@ function BridgeClient.giveVehicleKeys(plate)
     TriggerServerEvent('Bridge:giveVehicleKeys', plate)
     return true
 end
+
+local function toModelHash(model)
+    if type(model) == 'number' then
+        return model
+    end
+
+    return GetHashKey(model)
+end
+
+function BridgeClient.requestModel(model, timeoutMs)
+    local modelHash = toModelHash(model)
+    if not IsModelInCdimage(modelHash) then
+        return false
+    end
+
+    RequestModel(modelHash)
+
+    local timeout = timeoutMs or 10000
+    local startTime = GetGameTimer()
+    while not HasModelLoaded(modelHash) do
+        if GetGameTimer() - startTime > timeout then
+            return false
+        end
+
+        Wait(0)
+    end
+
+    return true
+end
+
+function BridgeClient.setModelAsNoLongerNeeded(model)
+    local modelHash = toModelHash(model)
+    if not IsModelInCdimage(modelHash) then
+        return false
+    end
+
+    SetModelAsNoLongerNeeded(modelHash)
+    return true
+end
+
+function BridgeClient.spawnPed(model, coords, heading, networked)
+    if not BridgeClient.requestModel(model) then
+        return nil
+    end
+
+    local modelHash = toModelHash(model)
+    local ped = CreatePed(4, modelHash, coords.x, coords.y, coords.z, heading or 0.0, networked == true, false)
+    BridgeClient.setModelAsNoLongerNeeded(modelHash)
+    return ped
+end
+
+function BridgeClient.spawnVehicle(model, coords, heading, networked)
+    if not BridgeClient.requestModel(model) then
+        return nil
+    end
+
+    local modelHash = toModelHash(model)
+    local vehicle = CreateVehicle(modelHash, coords.x, coords.y, coords.z, heading or 0.0, networked == true, false)
+    BridgeClient.setModelAsNoLongerNeeded(modelHash)
+    return vehicle
+end
+
+function BridgeClient.setEntityAsNoLongerNeeded(entity)
+    if not entity or entity == 0 then
+        return false
+    end
+
+    SetEntityAsNoLongerNeeded(entity)
+    return true
+end
