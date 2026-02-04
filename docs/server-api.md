@@ -4,7 +4,7 @@ All server helpers delegate to the active adapter. The goal is to call one funct
 
 ## Framework
 - `MetaBridge.getFramework()` → `string|nil`
-  - Returns `qbcore`, `esx`, `qbox`, or `nil` if none detected.
+  - Returns `qbcore`, `esx`, `qbox`, `ox`, `vrp`, `standalone`, or `nil` if none detected.
 - `MetaBridge.isReady()` → `boolean`
   - True when a framework is detected and an adapter is loaded.
 
@@ -28,6 +28,20 @@ All server helpers delegate to the active adapter. The goal is to call one funct
 - `MetaBridge.giveVehicleKeys(source, plate)`
   - Delegates to key resources or your override.
 
+## Inventory Helpers
+- `MetaBridge.getItemData(source, itemName, meta)`
+  - Returns item data from the active inventory adapter (if available).
+- `MetaBridge.getItemCount(source, itemName, meta)`
+  - Returns item count (defaults to 0 if unknown).
+- `MetaBridge.addItem(source, itemName, amount, meta)`
+  - Adds an item when supported by the inventory system.
+- `MetaBridge.removeItem(source, itemName, amount, meta)`
+  - Removes an item when supported by the inventory system.
+- `MetaBridge.getItemFromSlot(source, slot)`
+  - Returns `{ name, metadata }` for a slot when supported, or `nil`.
+- `MetaBridge.notify(source, data)`
+  - Sends a notification to a player using the active server/client system or overrides.
+
 ## Dispatcher
 - `MetaBridge.call(methodName, ...)`
   - Calls a method on the active adapter by name.
@@ -42,6 +56,14 @@ MetaBridge.register('getIdentifier', function(source)
 end)
 ```
 
+You can also override inventory methods directly:
+
+```lua
+BridgeInventory.register('addItem', function(source, itemName, amount, meta)
+  -- custom add logic
+end)
+```
+
 ## Events
 The bridge exposes a server event for client key requests:
 
@@ -50,3 +72,9 @@ The bridge exposes a server event for client key requests:
   - source: player id (from event)
 
 The handler calls `MetaBridge.giveVehicleKeys(source, plate)` internally.
+
+Dispatch event (standalone mode):
+
+- `MetaBridge:dispatch:sendAlert`
+  - args: `data` (dispatch payload)
+  - broadcasts to clients via `MetaBridge:dispatch:clientAlert`

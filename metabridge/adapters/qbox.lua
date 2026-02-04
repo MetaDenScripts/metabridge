@@ -74,12 +74,21 @@ function BridgeAdapters.qbox.getJob(source)
 end
 
 function BridgeAdapters.qbox.getMoney(source, moneyType)
+    moneyType = moneyType or 'cash'
+    if moneyType == 'money' then
+        moneyType = 'cash'
+    end
+
+    local getMoney = getExportFunction('GetMoney')
+    if getMoney then
+        return getMoney(source, moneyType)
+    end
+
     local playerData = BridgeAdapters.qbox.getPlayerData(source)
     if not playerData or not playerData.money then
         return nil
     end
 
-    moneyType = moneyType or 'cash'
     return playerData.money[moneyType]
 end
 
@@ -101,6 +110,57 @@ function BridgeAdapters.qbox.hasItem(source, itemName, amount)
 
     amount = amount or 1
     return item.amount >= amount
+end
+
+function BridgeAdapters.qbox.getItemData(source, itemName, meta)
+    local getItem = getExportFunction('GetItemByName')
+    if getItem then
+        return getItem(source, itemName)
+    end
+
+    local player = BridgeAdapters.qbox.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.GetItemByName then
+        return nil
+    end
+
+    return player.Functions.GetItemByName(itemName)
+end
+
+function BridgeAdapters.qbox.getItemCount(source, itemName, meta)
+    local data = BridgeAdapters.qbox.getItemData(source, itemName, meta)
+    if not data then
+        return 0
+    end
+
+    return data.amount or data.count or 0
+end
+
+function BridgeAdapters.qbox.addItem(source, itemName, amount, meta)
+    local addItem = getExportFunction('AddItem')
+    if addItem then
+        return addItem(source, itemName, amount or 1, false, meta) == true
+    end
+
+    local player = BridgeAdapters.qbox.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.AddItem then
+        return false
+    end
+
+    return player.Functions.AddItem(itemName, amount or 1, false, meta) == true
+end
+
+function BridgeAdapters.qbox.removeItem(source, itemName, amount, meta)
+    local removeItem = getExportFunction('RemoveItem')
+    if removeItem then
+        return removeItem(source, itemName, amount or 1, false, meta) == true
+    end
+
+    local player = BridgeAdapters.qbox.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.RemoveItem then
+        return false
+    end
+
+    return player.Functions.RemoveItem(itemName, amount or 1, false, meta) == true
 end
 
 function BridgeAdapters.qbox.setFuel(vehicle, fuel)

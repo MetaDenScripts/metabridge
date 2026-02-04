@@ -11,12 +11,22 @@ Client helpers are intentionally small, and focus on common vehicle actions that
     - Sets fuel locally; returns `true` when applied.
 - `MetaBridgeClient.giveVehicleKeys(plate)` → `boolean`
     - Triggers a server event to grant keys to the player.
+- `MetaBridgeClient.sendDispatch(data)` → `void`
+    - Sends a dispatch alert using the configured system.
 - `MetaBridgeClient.spawnPed(model, coords, heading, networked)` → `entity|nil`
     - Spawns a ped using the model and releases it afterward.
 - `MetaBridgeClient.spawnVehicle(model, coords, heading, networked)` → `entity|nil`
     - Spawns a vehicle using the model and releases it afterward.
 - `MetaBridgeClient.setEntityAsNoLongerNeeded(entity)` → `boolean`
     - Releases a ped/vehicle entity.
+- `MetaBridgeClient.getItemLabel(itemName)` → `string`
+    - Returns a display label for an item, falling back to the item name.
+- `MetaBridgeClient.getItemImage(itemName)` → `string|nil`
+    - Returns an image URI for an item when supported, or `nil`.
+- `MetaBridgeClient.notify(data)` → `boolean`
+    - Shows a notification using the active client system (ox_lib, qbcore, esx) or overrides.
+- `MetaBridgeClient.addTargetModel(models, options)` → `boolean`
+    - Registers target interactions for models (ox_target, qtarget, qb-target) or overrides.
 
 ## Fuel Behavior
 `MetaBridgeClient.setFuel` tries (in order):
@@ -27,6 +37,28 @@ Client helpers are intentionally small, and focus on common vehicle actions that
 
 ## Keys Behavior
 `MetaBridgeClient.giveVehicleKeys` triggers the server event `MetaBridge:giveVehicleKeys` unless you override it.
+
+## Dispatch Behavior
+`MetaBridgeClient.sendDispatch` chooses a dispatch system (`ps`, `qs`, `rcore`, `cd`, or `standalone`) and submits an alert. The standalone system broadcasts to all clients and renders a blip + notification via `MetaBridge:dispatch:clientAlert`.
+
+### Dispatch Payload
+```lua
+MetaBridgeClient.sendDispatch({
+    coords = GetEntityCoords(PlayerPedId()),
+    jobs = { 'police', 'lspd', 'bcso' },
+    message = 'Suspicious activity',
+    description = 'Caller reports loud noises',
+    code = '10-35',
+    blip = {
+        sprite = 58,
+        color = 3,
+        scale = 1.0,
+        text = 'Dispatch Alert',
+        flash = false,
+        duration = 120000
+    }
+})
+```
 
 ## Spawn Example
 ```lua

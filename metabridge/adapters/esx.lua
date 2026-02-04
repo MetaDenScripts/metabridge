@@ -22,7 +22,15 @@ end
 
 local function getESX()
     if not ESX then
-        ESX = exports['es_extended']:getSharedObject()
+        if exports and exports['es_extended'] and exports['es_extended'].getSharedObject then
+            ESX = exports['es_extended']:getSharedObject()
+        end
+
+        if not ESX then
+            TriggerEvent('esx:getSharedObject', function(obj)
+                ESX = obj
+            end)
+        end
     end
 
     return ESX
@@ -66,8 +74,13 @@ function BridgeAdapters.esx.getMoney(source, moneyType)
         return nil
     end
 
-    if moneyType == 'bank' and player.getAccount then
-        local account = player.getAccount('bank')
+    moneyType = moneyType or 'money'
+    if moneyType == 'cash' then
+        moneyType = 'money'
+    end
+
+    if moneyType ~= 'money' and player.getAccount then
+        local account = player.getAccount(moneyType)
         return account and account.money or nil
     end
 
@@ -90,7 +103,57 @@ function BridgeAdapters.esx.hasItem(source, itemName, amount)
     end
 
     amount = amount or 1
-    return item.count >= amount
+    local itemCount = item.count or item.amount or 0
+    return itemCount >= amount
+end
+
+function BridgeAdapters.esx.getItemData(source, itemName, meta)
+    local player = BridgeAdapters.esx.getPlayer(source)
+    if not player or not player.getInventoryItem then
+        return nil
+    end
+
+    return player.getInventoryItem(itemName)
+end
+
+function BridgeAdapters.esx.getItemCount(source, itemName, meta)
+    local data = BridgeAdapters.esx.getItemData(source, itemName, meta)
+    if not data then
+        return 0
+    end
+
+    return data.count or data.amount or 0
+end
+
+function BridgeAdapters.esx.addItem(source, itemName, amount, meta)
+    local player = BridgeAdapters.esx.getPlayer(source)
+    if not player or not player.addInventoryItem then
+        return false
+    end
+
+    amount = amount or 1
+    if player.canCarryItem and not player.canCarryItem(itemName, amount) then
+        return false
+    end
+
+    player.addInventoryItem(itemName, amount, meta)
+    return true
+end
+
+function BridgeAdapters.esx.removeItem(source, itemName, amount, meta)
+    local player = BridgeAdapters.esx.getPlayer(source)
+    if not player or not player.removeInventoryItem then
+        return false
+    end
+
+    amount = amount or 1
+    local count = BridgeAdapters.esx.getItemCount(source, itemName, meta)
+    if count < amount then
+        return false
+    end
+
+    player.removeInventoryItem(itemName, amount)
+    return true
 end
 
 function BridgeAdapters.esx.setFuel(vehicle, fuel)

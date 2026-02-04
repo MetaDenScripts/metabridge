@@ -33,9 +33,64 @@ Resource: `qbx_core`
 - `setFuel`: tries `LegacyFuel`, `ps-fuel`, `cdn-fuel`
 - `giveVehicleKeys`: tries `qb-vehiclekeys` exports (`GiveKeys` or `AddKeys`)
 
+## Ox Core (`ox`)
+Resource: `ox_core`
+
+**Player helpers**
+- `getPlayer`, `getPlayerData`, `getIdentifier`, `getJob`, `getMoney`, `hasItem`
+
+**Vehicle helpers**
+- `setFuel`: tries `LegacyFuel`, `ps-fuel`, `cdn-fuel`
+- `giveVehicleKeys`: tries `qb-vehiclekeys` exports (`GiveKeys` or `AddKeys`)
+
+## vRP (`vrp`)
+Resource: `vRP` / `vrp`
+
+**Player helpers**
+- Uses `vRP` proxy when available
+- `getIdentifier` returns user id (string)
+
+**Vehicle helpers**
+- `setFuel`: tries `LegacyFuel`, `ps-fuel`, `cdn-fuel`
+- `giveVehicleKeys`: tries `qb-vehiclekeys` exports (`GiveKeys` or `AddKeys`)
+
+## Standalone (`standalone`)
+No framework resource required.
+
+**Player helpers**
+- `getIdentifier` returns license identifier
+
+**Vehicle helpers**
+- `setFuel`: tries `LegacyFuel`, `ps-fuel`, `cdn-fuel`
+- `giveVehicleKeys`: tries `qb-vehiclekeys` exports (`GiveKeys` or `AddKeys`)
+
 ## Custom Overrides
 If your resource names or exports differ, override using:
 - `MetaBridge.register(methodName, handler)`
 - `BridgeConfig.fuel.set`
 - `BridgeConfig.keys.give`
 - `BridgeConfig.keysClient.give`
+
+## Inventory Adapters
+Inventory adapters are optional and can be overridden with `BridgeConfig.inventory`.
+
+Supported systems:
+- `framework` (uses framework inventory where available)
+- `ox_inventory`
+- `qs-inventory`
+- `ps-inventory`
+- `qb-inventory`
+- `codem-inventory`
+- `core_inventory`
+- `ak47_inventory`
+- `origen_inventory`
+
+## Dispatch Systems
+Dispatch helpers are optional and can be overridden with `BridgeConfig.dispatch.system`.
+
+Supported systems:
+- `ps` (`ps-dispatch`)
+- `qs` (`qs-dispatch`)
+- `rcore` (`rcore_dispatch`)
+- `cd` (`cd_dispatch`)
+- `standalone`

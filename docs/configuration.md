@@ -6,7 +6,26 @@ Create `BridgeConfig` in a shared file loaded **before** the bridge (for example
 BridgeConfig = BridgeConfig or {}
 
 -- Optional: force a framework instead of auto-detection
-BridgeConfig.framework = 'qbcore' -- qbcore | esx | qbox
+BridgeConfig.framework = 'qbcore' -- qbcore | esx | qbox | ox | vrp | standalone (aliases supported)
+
+-- Optional: inventory system override
+BridgeConfig.inventory = 'ox_inventory' -- framework | ox_inventory | qs-inventory | ps-inventory | qb-inventory | codem-inventory | core_inventory | ak47_inventory | origen_inventory
+
+-- Optional: dispatch system override
+BridgeConfig.dispatch = {
+    system = 'ps', -- ps | qs | rcore | cd | standalone
+    send = function(data)
+        -- custom dispatch send logic
+    end,
+    filter = function(data)
+        -- client-side filter for incoming alerts
+        return true
+    end,
+    filterServer = function(data)
+        -- server-side filter before broadcast
+        return true
+    end
+}
 
 -- Optional: override fuel integration
 BridgeConfig.fuel = {
