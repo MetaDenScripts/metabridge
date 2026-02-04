@@ -78,3 +78,10 @@ Dispatch event (standalone mode):
 - `MetaBridge:dispatch:sendAlert`
   - args: `data` (dispatch payload)
   - broadcasts to clients via `MetaBridge:dispatch:clientAlert`
+
+## Exports
+All `MetaBridge` functions are exported automatically. Example:
+
+```lua
+exports['metabridge']:notify(source, { type = 'error', description = 'Not allowed' })
+```

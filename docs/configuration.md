@@ -11,6 +11,12 @@ BridgeConfig.framework = 'qbcore' -- qbcore | esx | qbox | ox | vrp | standalone
 -- Optional: inventory system override
 BridgeConfig.inventory = 'ox_inventory' -- framework | ox_inventory | qs-inventory | ps-inventory | qb-inventory | codem-inventory | core_inventory | ak47_inventory | origen_inventory
 
+-- Optional: inventory UI helpers
+BridgeConfig.inventory = BridgeConfig.inventory or {}
+BridgeConfig.inventory.getItemImage = function(itemName)
+    -- return an image URI for your inventory system
+end
+
 -- Optional: dispatch system override
 BridgeConfig.dispatch = {
     system = 'ps', -- ps | qs | rcore | cd | standalone
@@ -24,6 +30,16 @@ BridgeConfig.dispatch = {
     filterServer = function(data)
         -- server-side filter before broadcast
         return true
+    end
+}
+
+-- Optional: notification overrides
+BridgeConfig.notify = {
+    client = function(data)
+        -- custom client notify
+    end,
+    server = function(source, data)
+        -- custom server notify (usually TriggerClientEvent)
     end
 }
 
@@ -45,6 +61,13 @@ BridgeConfig.keys = {
 BridgeConfig.keysClient = {
     give = function(plate)
         -- custom client-side key logic
+    end
+}
+
+-- Optional: override target integration
+BridgeConfig.target = {
+    addModel = function(models, options)
+        -- custom target addModel logic
     end
 }
 ```

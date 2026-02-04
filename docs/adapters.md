@@ -2,6 +2,11 @@
 
 Adapters translate the bridge API into framework-specific calls. Each adapter exposes the same method names so the bridge can dispatch consistently.
 
+Files live under:
+- `metabridge/links/frameworks/*.lua`
+- `metabridge/links/inventories/*.lua`
+- `metabridge/links/dispatch/*.lua`
+
 ## QBCore (`qbcore`)
 Resource: `qb-core`
 

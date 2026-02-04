@@ -80,3 +80,10 @@ BridgeConfig.keysClient = {
         end
 }
 ```
+
+## Exports
+All `MetaBridgeClient` functions are exported automatically. Example:
+
+```lua
+exports['metabridge']:notify({ type = 'inform', description = 'Hello' })
+```

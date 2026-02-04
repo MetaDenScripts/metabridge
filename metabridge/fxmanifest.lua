@@ -9,3 +9,7 @@ version '1.0.0'
 shared_scripts {
     'init.lua'
 }
+
+escrow_ignore {
+    '**',
+}

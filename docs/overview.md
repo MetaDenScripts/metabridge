@@ -21,10 +21,14 @@ Detection is done via resource state checks:
 If you want to force a framework, set `BridgeConfig.framework`.
 
 ## File Layout (Why Each File Exists)
-- `metabridge/bridge.lua`: server dispatcher (`MetaBridge.call`) + server helpers.
-- `metabridge/client.lua`: client helpers (`MetaBridgeClient.*`) for fuel/keys.
-- `metabridge/shared.lua`: detection helpers and shared utilities.
-- `metabridge/adapters/*.lua`: framework-specific logic mapped to the same API.
+- `metabridge/init.lua`: loader for all resource/links/exports files.
+- `metabridge/resource/bridge.lua`: server dispatcher (`MetaBridge.call`) + server helpers.
+- `metabridge/resource/client.lua`: client helpers (`MetaBridgeClient.*`).
+- `metabridge/resource/shared.lua`: detection helpers and shared utilities.
+- `metabridge/links/frameworks/*.lua`: framework-specific logic mapped to the same API.
+- `metabridge/links/inventories/*.lua`: inventory adapters.
+- `metabridge/links/dispatch/*.lua`: dispatch integration.
+- `metabridge/exports/*.lua`: auto-export of `MetaBridge` / `MetaBridgeClient` helpers.
 
 ## Typical Flow
 1. Your script calls `MetaBridge.getIdentifier(source)`.
@@ -33,6 +37,12 @@ If you want to force a framework, set `BridgeConfig.framework`.
 4. The identifier is returned in the same format, regardless of framework.
 
 ## Quick Start
+Add this to your resource shared scripts:
+
+```lua
+'@metabridge/init.lua'
+```
+
 Server:
 ```lua
 local framework = MetaBridge.getFramework()
