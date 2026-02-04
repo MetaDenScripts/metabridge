@@ -4,6 +4,8 @@ InventoryAdapters['ps-inventory'] = {
     name = 'ps-inventory'
 }
 
+local psInventory = InventoryAdapters['ps-inventory']
+
 local function callExport(resourceName, methodName, ...)
     if not exports or not exports[resourceName] then
         return nil
@@ -18,19 +20,19 @@ local function callExport(resourceName, methodName, ...)
     return fn(resource, ...)
 end
 
-function InventoryAdapters['ps-inventory'].getItemData(source, itemName, meta)
+function psInventory.getItemData(source, itemName, meta)
     return callExport('ps-inventory', 'GetItemByName', source, itemName)
 end
 
-function InventoryAdapters['ps-inventory'].getItemCount(source, itemName, meta)
-    local data = InventoryAdapters['ps-inventory'].getItemData(source, itemName, meta)
+function psInventory.getItemCount(source, itemName, meta)
+    local data = psInventory.getItemData(source, itemName, meta)
     return data and (data.amount or data.count or 0) or 0
 end
 
-function InventoryAdapters['ps-inventory'].addItem(source, itemName, amount, meta)
+function psInventory.addItem(source, itemName, amount, meta)
     return callExport('ps-inventory', 'AddItem', source, itemName, amount or 1, nil, meta) == true
 end
 
-function InventoryAdapters['ps-inventory'].removeItem(source, itemName, amount, meta)
+function psInventory.removeItem(source, itemName, amount, meta)
     return callExport('ps-inventory', 'RemoveItem', source, itemName, amount or 1, nil) == true
 end
