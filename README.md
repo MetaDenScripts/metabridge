@@ -48,6 +48,7 @@ MetaBridgeClient.giveVehicleKeys(GetVehicleNumberPlateText(vehicle))
 All helpers delegate to the active framework adapter.
 
 - `MetaBridge.getFramework()`
+- `MetaBridge.isReady()`
 - `MetaBridge.call(methodName, ...)`
 - `MetaBridge.getPlayer(source)`
 - `MetaBridge.getPlayerData(source)`
@@ -61,16 +62,24 @@ All helpers delegate to the active framework adapter.
 - `MetaBridge.getItemCount(source, itemName, meta)`
 - `MetaBridge.addItem(source, itemName, amount, meta)`
 - `MetaBridge.removeItem(source, itemName, amount, meta)`
+- `MetaBridge.getItemFromSlot(source, slot)`
+- `MetaBridge.notify(source, data)`
 - `MetaBridge.register(methodName, handler)`
 
 Client helpers:
 - `MetaBridgeClient.getFramework()`
+- `MetaBridgeClient.isReady()`
 - `MetaBridgeClient.setFuel(vehicle, fuel)`
 - `MetaBridgeClient.giveVehicleKeys(plate)`
+- `MetaBridgeClient.getItemLabel(itemName)`
+- `MetaBridgeClient.getItemImage(itemName)`
+- `MetaBridgeClient.notify(data)`
+- `MetaBridgeClient.requestCallback(name, cb, ...)`
 - `MetaBridgeClient.sendDispatch(data)`
 - `MetaBridgeClient.spawnPed(model, coords, heading, networked)`
 - `MetaBridgeClient.spawnVehicle(model, coords, heading, networked)`
 - `MetaBridgeClient.setEntityAsNoLongerNeeded(entity)`
+- `MetaBridgeClient.addTargetModel(models, options)`
 
 ## Configuration
 Override detection if you want to force a framework:
@@ -115,6 +124,36 @@ BridgeConfig.keys = {
 BridgeConfig.keysClient = {
     give = function(plate)
         -- custom client keys logic
+    end
+}
+
+-- Optional: callback override (client-side)
+BridgeConfig.callback = {
+    client = function(name, cb, ...)
+        -- custom callback handler
+    end
+}
+
+-- Optional: notification overrides
+BridgeConfig.notify = {
+    client = function(data)
+        -- custom client notify
+    end,
+    server = function(source, data)
+        -- custom server notify (usually TriggerClientEvent)
+    end
+}
+
+-- Optional: inventory UI helpers
+BridgeConfig.inventory = BridgeConfig.inventory or {}
+BridgeConfig.inventory.getItemImage = function(itemName)
+    -- return an image URI for your inventory system
+end
+
+-- Optional: override target integration
+BridgeConfig.target = {
+    addModel = function(models, options)
+        -- custom target addModel logic
     end
 }
 ```

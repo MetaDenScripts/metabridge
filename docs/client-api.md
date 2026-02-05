@@ -25,6 +25,8 @@ Client helpers are intentionally small, and focus on common vehicle actions that
     - Returns an image URI for an item when supported, or `nil`.
 - `MetaBridgeClient.notify(data)` → `boolean`
     - Shows a notification using the active client system (ox_lib, qbcore, esx) or overrides.
+- `MetaBridgeClient.requestCallback(name, cb, ...)` → `any`
+    - Runs a server callback using ox_lib, qbcore, esx, or your override.
 - `MetaBridgeClient.addTargetModel(models, options)` → `boolean`
     - Registers target interactions for models (ox_target, qtarget, qb-target) or overrides.
 
@@ -78,6 +80,16 @@ BridgeConfig.keysClient = {
         give = function(plate)
                 -- custom client keys logic
         end
+}
+```
+
+## Callback Overrides
+```lua
+BridgeConfig = BridgeConfig or {}
+BridgeConfig.callback = {
+    client = function(name, cb, ...)
+        -- custom callback handler
+    end
 }
 ```
 

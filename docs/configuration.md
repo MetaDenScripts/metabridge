@@ -64,6 +64,13 @@ BridgeConfig.keysClient = {
     end
 }
 
+-- Optional: callback override (client-side)
+BridgeConfig.callback = {
+    client = function(name, cb, ...)
+        -- custom callback handler
+    end
+}
+
 -- Optional: override target integration
 BridgeConfig.target = {
     addModel = function(models, options)

@@ -38,6 +38,10 @@ This document lists all available helpers and their export names. All functions 
 - `notify(data)` → `boolean`
   - Shows a notification (ox_lib/qbcore/esx or override).
 
+### Callbacks
+- `requestCallback(name, cb, ...)` → `any`
+  - Runs a server callback using ox_lib, qbcore, esx, or your override.
+
 ### Targeting
 - `addTargetModel(models, options)` → `boolean`
   - Registers target models across ox_target/qtarget/qb-target or override.
@@ -82,6 +86,9 @@ All functions above are exported automatically using the same name. For example:
 ```lua
 -- client
 exports['metabridge']:notify({ type = 'inform', description = 'Hello' })
+exports['metabridge']:requestCallback('my:callback', function(result)
+  print(result)
+end)
 exports['metabridge']:addTargetModel(models, options)
 
 -- server
