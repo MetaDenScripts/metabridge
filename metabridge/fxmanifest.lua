@@ -7,7 +7,29 @@ description 'MetaDen Scripts | Bridge implementation to support various framewor
 version '1.0.0'
 
 shared_scripts {
+    'resource/shared.lua',
     'init.lua'
+}
+
+client_scripts {
+    'resource/client.lua',
+    'links/dispatch/client.lua',
+    'exports/client.lua'
+}
+
+server_scripts {
+    'resource/bridge.lua',
+    'resource/inventory.lua',
+    'links/dispatch/server.lua',
+    'links/frameworks/*.lua',
+    'links/inventories/*.lua',
+    'exports/server.lua'
+}
+
+files {
+    'resource/*.lua',
+    'links/dispatch/*.lua',
+    'exports/*.lua'
 }
 
 escrow_ignore {

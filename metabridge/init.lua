@@ -1,4 +1,11 @@
-local resource = GetCurrentResourceName()
+if GetCurrentResourceName() == 'metabridge' then
+    return
+end
+
+local resource = 'metabridge'
+if GetResourceState(resource) == 'missing' then
+    resource = GetCurrentResourceName()
+end
 
 local function loadFile(path)
     local chunk = LoadResourceFile(resource, path)

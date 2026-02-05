@@ -1,5 +1,25 @@
 MetaBridgeClient = MetaBridgeClient or {}
 
+local QBCore = QBCore
+
+local function getQBCore()
+    if QBCore then
+        return QBCore
+    end
+
+    if exports and exports['qb-core'] and exports['qb-core'].GetCoreObject then
+        local ok, core = pcall(function()
+            return exports['qb-core']:GetCoreObject()
+        end)
+        if ok and core then
+            QBCore = core
+            return QBCore
+        end
+    end
+
+    return nil
+end
+
 local function getResourceExport(resourceName, methodName)
     if BridgeShared and BridgeShared.isStarted and not BridgeShared.isStarted(resourceName) then
         return nil
@@ -204,6 +224,28 @@ function MetaBridgeClient.notify(data)
     return false
 end
 
+function MetaBridgeClient.requestCallback(name, cb, ...)
+    if BridgeConfig and BridgeConfig.callback and BridgeConfig.callback.client then
+        return BridgeConfig.callback.client(name, cb, ...)
+    end
+
+    if lib and type(lib.callback) == 'function' then
+        return lib.callback(name, false, cb, ...)
+    end
+
+    local core = getQBCore()
+    if core and core.Functions and type(core.Functions.TriggerCallback) == 'function' then
+        return core.Functions.TriggerCallback(name, cb, ...)
+    end
+
+    if ESX and type(ESX.TriggerServerCallback) == 'function' then
+        return ESX.TriggerServerCallback(name, cb, ...)
+    end
+
+    print(('^1[metabridge] No callback handler for %s.^7'):format(name))
+    return nil
+end
+
 function MetaBridgeClient.addTargetModel(models, options)
     if BridgeConfig and BridgeConfig.target and BridgeConfig.target.addModel then
         return BridgeConfig.target.addModel(models, options)
@@ -226,3 +268,15 @@ function MetaBridgeClient.addTargetModel(models, options)
 
     return false
 end
+
+exports('addTargetModel', function(models, options)
+    return MetaBridgeClient.addTargetModel(models, options)
+end)
+
+exports('getItemLabel', function(itemName)
+    return MetaBridgeClient.getItemLabel(itemName)
+end)
+
+exports('getItemImage', function(itemName)
+    return MetaBridgeClient.getItemImage(itemName)
+end)
