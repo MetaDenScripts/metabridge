@@ -6,20 +6,6 @@ BridgeAdapters.qbcore = {
 
 local QBCore = nil
 
-local function callExport(resourceName, methodName, ...)
-    if not exports or not exports[resourceName] then
-        return nil
-    end
-
-    local resource = exports[resourceName]
-    local fn = resource[methodName]
-    if type(fn) ~= 'function' then
-        return nil
-    end
-
-    return fn(resource, ...)
-end
-
 local function getCore()
     if not QBCore then
         QBCore = exports['qb-core']:GetCoreObject()
@@ -31,10 +17,18 @@ end
 function BridgeAdapters.qbcore.getPlayer(source)
     local core = getCore()
     if not core or not core.Functions then
+        BridgeShared.debug('adapter.qbcore', 'Core unavailable for GetPlayer')
         return nil
     end
 
-    return core.Functions.GetPlayer(source)
+    local playerSource = tonumber(source) or source
+    local player = core.Functions.GetPlayer(playerSource)
+    BridgeShared.debug('adapter.qbcore', 'Fetched player', {
+        source = playerSource,
+        hasPlayer = player ~= nil,
+        playerType = type(player)
+    })
+    return player
 end
 
 function BridgeAdapters.qbcore.getPlayerData(source)
@@ -48,8 +42,23 @@ function BridgeAdapters.qbcore.getIdentifier(source)
 end
 
 function BridgeAdapters.qbcore.getJob(source)
+    local player = BridgeAdapters.qbcore.getPlayer(source)
+    local job = BridgeShared.resolveJobData(player)
+    if job ~= nil then
+        return job
+    end
+
     local playerData = BridgeAdapters.qbcore.getPlayerData(source)
-    return playerData and playerData.job or nil
+    job = BridgeShared.resolveJobData(playerData)
+
+    BridgeShared.debug('adapter.qbcore', 'Job resolution result', {
+        source = source,
+        hasPlayer = player ~= nil,
+        hasPlayerData = playerData ~= nil,
+        hasJob = job ~= nil
+    })
+
+    return job
 end
 
 function BridgeAdapters.qbcore.getMoney(source, moneyType)
@@ -128,57 +137,9 @@ function BridgeAdapters.qbcore.removeItem(source, itemName, amount, meta)
 end
 
 function BridgeAdapters.qbcore.setFuel(vehicle, fuel)
-    if BridgeConfig and BridgeConfig.fuel and BridgeConfig.fuel.set then
-        return BridgeConfig.fuel.set(vehicle, fuel)
-    end
-
-    if BridgeShared and BridgeShared.isStarted then
-        if BridgeShared.isStarted('LegacyFuel') then
-            local result = callExport('LegacyFuel', 'SetFuel', vehicle, fuel)
-            if result ~= nil then
-                return result
-            end
-            return true
-        end
-
-        if BridgeShared.isStarted('ps-fuel') then
-            local result = callExport('ps-fuel', 'SetFuel', vehicle, fuel)
-            if result ~= nil then
-                return result
-            end
-        end
-
-        if BridgeShared.isStarted('cdn-fuel') then
-            local result = callExport('cdn-fuel', 'SetFuel', vehicle, fuel)
-            if result ~= nil then
-                return result
-            end
-        end
-    end
-
-    return false
+    return BridgeShared.setFuel(vehicle, fuel)
 end
 
 function BridgeAdapters.qbcore.giveVehicleKeys(source, plate)
-    if BridgeConfig and BridgeConfig.keys and BridgeConfig.keys.give then
-        return BridgeConfig.keys.give(source, plate)
-    end
-
-    if BridgeShared and BridgeShared.isStarted then
-        if BridgeShared.isStarted('qb-vehiclekeys') then
-            local result = callExport('qb-vehiclekeys', 'GiveKeys', source, plate)
-            if result ~= nil then
-                return result
-            end
-
-            result = callExport('qb-vehiclekeys', 'AddKeys', source, plate)
-            if result ~= nil then
-                return result
-            end
-
-            return true
-        end
-    end
-
-    return false
+    return BridgeShared.giveVehicleKeys(source, plate)
 end

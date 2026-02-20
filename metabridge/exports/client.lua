@@ -34,8 +34,19 @@ local alwaysExport = {
     'getItemLabel',
     'getItemImage',
     'notify',
+    'progressBar',
+    'registerContext',
+    'showContext',
     'requestCallback',
-    'addTargetModel'
+    'requestCallbackAwait',
+    'inputDialog',
+    'addTargetModel',
+    'addTargetBoxZone',
+    'addTargetSphereZone',
+    'removeTargetZone',
+    'showTextUI',
+    'hideTextUI',
+    'isTextUIOpen'
 }
 
 for _, name in ipairs(alwaysExport) do

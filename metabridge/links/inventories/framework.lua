@@ -19,3 +19,19 @@ end
 function InventoryAdapters.framework.removeItem(source, itemName, amount, meta)
     return nil
 end
+
+function InventoryAdapters.framework.canCarryWeight(source, weight)
+    return true
+end
+
+function InventoryAdapters.framework.getEmptySlot(source)
+    return true
+end
+
+function InventoryAdapters.framework.getSlotsWithItem(source, itemName, meta)
+    return {}
+end
+
+function InventoryAdapters.framework.setItemMetadata(source, slot, metadata)
+    return false
+end

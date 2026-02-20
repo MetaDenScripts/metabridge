@@ -30,23 +30,6 @@ end
 function InventoryAdapters.ox_inventory.addItem(source, itemName, amount, meta)
     amount = amount or 1
 
-    local itemData = callExport('ox_inventory', 'Items', itemName)
-    if itemData then
-        local weight = itemData.weight or 0
-        if weight > 0 then
-            local totalWeight = weight * amount
-            local canCarry = callExport('ox_inventory', 'CanCarryWeight', source, totalWeight)
-            if canCarry == false then
-                return false
-            end
-        end
-    end
-
-    local hasSlot = callExport('ox_inventory', 'GetEmptySlot', source)
-    if hasSlot == false or hasSlot == nil then
-        return false
-    end
-
     local success = callExport('ox_inventory', 'AddItem', source, itemName, amount, meta)
     if type(success) == 'boolean' then
         return success
@@ -101,4 +84,75 @@ function InventoryAdapters.ox_inventory.getItemFromSlot(source, slot)
     end
 
     return { name = itemInSlot.name, metadata = itemInSlot.metadata }
+end
+
+function InventoryAdapters.ox_inventory.canCarryWeight(source, weight)
+    weight = tonumber(weight) or 0
+    if weight <= 0 then
+        return true
+    end
+
+    local canCarry = callExport('ox_inventory', 'CanCarryWeight', source, weight)
+    if canCarry == nil then
+        return true
+    end
+
+    if type(canCarry) == 'boolean' then
+        return canCarry
+    end
+
+    if type(canCarry) == 'number' then
+        return canCarry >= weight
+    end
+
+    return canCarry ~= false
+end
+
+function InventoryAdapters.ox_inventory.getEmptySlot(source)
+    local slot = callExport('ox_inventory', 'GetEmptySlot', source)
+    if slot == nil or slot == false then
+        return false
+    end
+
+    return slot
+end
+
+function InventoryAdapters.ox_inventory.getSlotsWithItem(source, itemName, meta)
+    if type(itemName) ~= 'string' or itemName == '' then
+        return {}
+    end
+
+    local items = callExport('ox_inventory', 'Search', source, 'slots', itemName, meta)
+    if type(items) ~= 'table' then
+        return {}
+    end
+
+    local slots = {}
+    for slotKey, itemData in pairs(items) do
+        if type(itemData) == 'table' then
+            if itemData.slot == nil and type(slotKey) == 'number' then
+                itemData.slot = slotKey
+            end
+            slots[#slots + 1] = itemData
+        end
+    end
+
+    return slots
+end
+
+function InventoryAdapters.ox_inventory.setItemMetadata(source, slot, metadata)
+    if type(slot) ~= 'number' then
+        return false
+    end
+
+    if type(metadata) ~= 'table' then
+        metadata = {}
+    end
+
+    local result = callExport('ox_inventory', 'SetMetadata', source, slot, metadata)
+    if type(result) == 'boolean' then
+        return result
+    end
+
+    return result ~= nil
 end
