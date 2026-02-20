@@ -1,6 +1,8 @@
 MetaBridgeClient = MetaBridgeClient or {}
 
 local QBCore = QBCore
+local callbackRequestId = 0
+local pendingCallbacks = {}
 
 local function getQBCore()
     if QBCore then
@@ -21,23 +23,11 @@ local function getQBCore()
 end
 
 local function getResourceExport(resourceName, methodName)
-    if BridgeShared and BridgeShared.isStarted and not BridgeShared.isStarted(resourceName) then
+    if not BridgeShared or not BridgeShared.getExportFunction then
         return nil
     end
 
-    if not exports or not exports[resourceName] then
-        return nil
-    end
-
-    local resource = exports[resourceName]
-    local fn = resource[methodName]
-    if type(fn) ~= 'function' then
-        return nil
-    end
-
-    return function(...)
-        return fn(resource, ...)
-    end
+    return BridgeShared.getExportFunction(resourceName, methodName, true)
 end
 
 function MetaBridgeClient.getFramework()
@@ -175,27 +165,12 @@ function MetaBridgeClient.getItemImage(itemName)
     return nil
 end
 
-local function normalizeNotifyPayload(data)
-    if type(data) == 'string' then
-        return { description = data, type = 'inform' }
-    end
-
-    if type(data) == 'table' then
-        if data.message and not data.description then
-            data.description = data.message
-        end
-        return data
-    end
-
-    return { description = tostring(data), type = 'inform' }
-end
-
 function MetaBridgeClient.notify(data)
     if BridgeConfig and BridgeConfig.notify and BridgeConfig.notify.client then
         return BridgeConfig.notify.client(data)
     end
 
-    local payload = normalizeNotifyPayload(data)
+    local payload = BridgeShared.normalizeNotifyPayload(data)
 
     if lib and lib.notify then
         lib.notify(payload)
@@ -224,13 +199,90 @@ function MetaBridgeClient.notify(data)
     return false
 end
 
-function MetaBridgeClient.requestCallback(name, cb, ...)
-    if BridgeConfig and BridgeConfig.callback and BridgeConfig.callback.client then
-        return BridgeConfig.callback.client(name, cb, ...)
+function MetaBridgeClient.progressBar(data)
+    if BridgeConfig and BridgeConfig.progressBar and BridgeConfig.progressBar.client then
+        return BridgeConfig.progressBar.client(data)
     end
 
-    if lib and type(lib.callback) == 'function' then
-        return lib.callback(name, false, cb, ...)
+    if lib and lib.progressBar then
+        return lib.progressBar(data)
+    end
+
+    return false
+end
+
+function MetaBridgeClient.registerContext(data)
+    if BridgeConfig and BridgeConfig.context and BridgeConfig.context.register then
+        return BridgeConfig.context.register(data)
+    end
+
+    if lib and lib.registerContext then
+        lib.registerContext(data)
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.showContext(contextId)
+    if BridgeConfig and BridgeConfig.context and BridgeConfig.context.show then
+        return BridgeConfig.context.show(contextId)
+    end
+
+    if lib and lib.showContext then
+        lib.showContext(contextId)
+        return true
+    end
+
+    return false
+end
+
+RegisterNetEvent('MetaBridge:callbackResponse', function(requestId, success, payload)
+    local pending = pendingCallbacks[requestId]
+    if not pending then
+        return
+    end
+
+    pendingCallbacks[requestId] = nil
+
+    local packed = type(payload) == 'table' and payload or { n = 0 }
+    if packed.n == nil then
+        packed.n = #packed
+    end
+
+    pending.callback(success == true, packed)
+end)
+
+local function requestBridgeCallback(name, callback, ...)
+    callbackRequestId = callbackRequestId + 1
+    local requestId = callbackRequestId
+    local packedArgs = table.pack(...)
+
+    pendingCallbacks[requestId] = {
+        callback = callback
+    }
+
+    TriggerServerEvent('MetaBridge:invokeCallback', requestId, name, packedArgs)
+    return requestId
+end
+
+function MetaBridgeClient.requestCallback(name, cb, ...)
+    if BridgeConfig and BridgeConfig.callback and BridgeConfig.callback.client then
+        local ok, result = pcall(BridgeConfig.callback.client, name, cb, ...)
+        if ok and result ~= nil then
+            return result
+        end
+    end
+
+    if lib and lib.callback then
+        local cbType = type(lib.callback)
+        local mt = getmetatable(lib.callback)
+        if cbType == 'function' or (cbType == 'table' and mt and type(mt.__call) == 'function') then
+            local ok, result = pcall(lib.callback, name, false, cb, ...)
+            if ok then
+                return result
+            end
+        end
     end
 
     local core = getQBCore()
@@ -242,8 +294,197 @@ function MetaBridgeClient.requestCallback(name, cb, ...)
         return ESX.TriggerServerCallback(name, cb, ...)
     end
 
-    print(('^1[metabridge] No callback handler for %s.^7'):format(name))
+    return requestBridgeCallback(name, function(success, packed)
+        if type(cb) ~= 'function' then
+            return
+        end
+
+        if not success then
+            cb(nil)
+            return
+        end
+
+        cb(table.unpack(packed, 1, packed.n or #packed))
+    end, ...)
+end
+
+function MetaBridgeClient.requestCallbackAwait(name, ...)
+    if lib and lib.callback and type(lib.callback.await) == 'function' then
+        local oxResponse = table.pack(pcall(lib.callback.await, name, false, ...))
+        if oxResponse[1] then
+            return table.unpack(oxResponse, 2, oxResponse.n)
+        end
+    end
+
+    local done = false
+    local results = nil
+    local failedMessage = nil
+
+    requestBridgeCallback(name, function(success, packed)
+        if success then
+            results = packed
+        else
+            failedMessage = packed and packed[1] or nil
+        end
+        done = true
+    end, ...)
+
+    local start = GetGameTimer()
+    while not done and GetGameTimer() - start < 10000 do
+        Wait(0)
+    end
+
+    if not done then
+        return nil
+    end
+
+    if not results then
+        return nil, failedMessage
+    end
+
+    return table.unpack(results, 1, results.n or #results)
+end
+
+function MetaBridgeClient.inputDialog(title, rows)
+    if BridgeConfig and BridgeConfig.input and BridgeConfig.input.dialog then
+        return BridgeConfig.input.dialog(title, rows)
+    end
+
+    if lib and lib.inputDialog then
+        return lib.inputDialog(title, rows)
+    end
+
     return nil
+end
+
+local function targetExport(resourceName, methodName)
+    if not BridgeShared or not BridgeShared.getExportFunction then
+        return nil
+    end
+
+    return BridgeShared.getExportFunction(resourceName, methodName, false)
+end
+
+function MetaBridgeClient.addTargetBoxZone(data)
+    if BridgeConfig and BridgeConfig.target and BridgeConfig.target.addBoxZone then
+        return BridgeConfig.target.addBoxZone(data)
+    end
+
+    local addOxBoxZone = targetExport('ox_target', 'addBoxZone')
+    if addOxBoxZone then
+        return addOxBoxZone(data)
+    end
+
+    local addQbBoxZone = targetExport('qb-target', 'AddBoxZone') or targetExport('qtarget', 'AddBoxZone')
+    if addQbBoxZone then
+        local zoneName = data.name or ('metabridge_box_%s'):format(math.random(10000, 99999))
+        local size = data.size or vec3(1.0, 1.0, 1.0)
+        local heading = data.rotation or data.heading or 0.0
+        local zoneOptions = {
+            name = zoneName,
+            heading = heading,
+            debugPoly = data.debug == true,
+            minZ = data.coords.z - (size.z / 2),
+            maxZ = data.coords.z + (size.z / 2)
+        }
+        local targetOptions = {
+            options = data.options or {},
+            distance = data.distance or 2.5
+        }
+        addQbBoxZone(zoneName, data.coords, size.x, size.y, zoneOptions, targetOptions)
+        return zoneName
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.addTargetSphereZone(data)
+    if BridgeConfig and BridgeConfig.target and BridgeConfig.target.addSphereZone then
+        return BridgeConfig.target.addSphereZone(data)
+    end
+
+    local addOxSphereZone = targetExport('ox_target', 'addSphereZone')
+    if addOxSphereZone then
+        return addOxSphereZone(data)
+    end
+
+    local addQbCircleZone = targetExport('qb-target', 'AddCircleZone') or targetExport('qtarget', 'AddCircleZone')
+    if addQbCircleZone then
+        local zoneName = data.name or ('metabridge_sphere_%s'):format(math.random(10000, 99999))
+        local size = data.size or vec3(1.0, 1.0, 1.0)
+        local radius = data.radius or size.x or 1.0
+        local zoneOptions = {
+            name = zoneName,
+            debugPoly = data.debug == true,
+            useZ = true
+        }
+        local targetOptions = {
+            options = data.options or {},
+            distance = data.distance or 2.5
+        }
+        addQbCircleZone(zoneName, data.coords, radius, zoneOptions, targetOptions)
+        return zoneName
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.removeTargetZone(zoneId)
+    if BridgeConfig and BridgeConfig.target and BridgeConfig.target.removeZone then
+        return BridgeConfig.target.removeZone(zoneId)
+    end
+
+    local removeOxZone = targetExport('ox_target', 'removeZone')
+    if removeOxZone then
+        removeOxZone(zoneId)
+        return true
+    end
+
+    local removeQbZone = targetExport('qb-target', 'RemoveZone') or targetExport('qtarget', 'RemoveZone')
+    if removeQbZone then
+        removeQbZone(zoneId)
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.showTextUI(text)
+    if BridgeConfig and BridgeConfig.textui and BridgeConfig.textui.show then
+        return BridgeConfig.textui.show(text)
+    end
+
+    if lib and lib.showTextUI then
+        lib.showTextUI(text)
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.hideTextUI()
+    if BridgeConfig and BridgeConfig.textui and BridgeConfig.textui.hide then
+        return BridgeConfig.textui.hide()
+    end
+
+    if lib and lib.hideTextUI then
+        lib.hideTextUI()
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.isTextUIOpen()
+    if BridgeConfig and BridgeConfig.textui and BridgeConfig.textui.isOpen then
+        return BridgeConfig.textui.isOpen()
+    end
+
+    if lib and lib.isTextUIOpen then
+        return lib.isTextUIOpen()
+    end
+
+    return false
 end
 
 function MetaBridgeClient.addTargetModel(models, options)
@@ -268,15 +509,3 @@ function MetaBridgeClient.addTargetModel(models, options)
 
     return false
 end
-
-exports('addTargetModel', function(models, options)
-    return MetaBridgeClient.addTargetModel(models, options)
-end)
-
-exports('getItemLabel', function(itemName)
-    return MetaBridgeClient.getItemLabel(itemName)
-end)
-
-exports('getItemImage', function(itemName)
-    return MetaBridgeClient.getItemImage(itemName)
-end)

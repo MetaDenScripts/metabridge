@@ -3,6 +3,23 @@ MetaBridge = MetaBridge or {}
 local activeAdapter = nil
 local activeFramework = nil
 local overrides = {}
+local fallbackCallbacks = {}
+
+local function isCallable(value)
+    local valueType = type(value)
+    if valueType == 'function' then
+        return true
+    end
+
+    if valueType == 'table' then
+        local mt = getmetatable(value)
+        if mt and type(mt.__call) == 'function' then
+            return true
+        end
+    end
+
+    return false
+end
 
 local function resolveFramework()
     if BridgeConfig and BridgeConfig.framework then
@@ -25,6 +42,7 @@ end
 
 function MetaBridge.init()
     activeFramework = resolveFramework()
+    BridgeShared.debug('server.init', 'Resolved framework', { framework = activeFramework })
     if not activeFramework then
         activeAdapter = nil
         return nil
@@ -76,7 +94,14 @@ function MetaBridge.call(methodName, ...)
         error(('MetaBridge method "%s" is not supported for %s.'):format(methodName, activeFramework or 'unknown'))
     end
 
-    return handler(...)
+    local result = handler(...)
+    BridgeShared.debug('server.call', 'Adapter call executed', {
+        framework = activeFramework,
+        method = methodName,
+        hasResult = result ~= nil,
+        resultType = type(result)
+    })
+    return result
 end
 
 function MetaBridge.getPlayer(source)
@@ -92,7 +117,22 @@ function MetaBridge.getIdentifier(source)
 end
 
 function MetaBridge.getJob(source)
-    return MetaBridge.call('getJob', source)
+    local job = MetaBridge.call('getJob', source)
+    if job ~= nil then
+        return job
+    end
+
+    local playerData = MetaBridge.getPlayerData(source)
+    local fallbackJob = BridgeShared.resolveJobData(playerData)
+
+    BridgeShared.debug('server.getJob', 'Job resolution fallback used', {
+        source = source,
+        framework = activeFramework,
+        directWasNil = true,
+        fallbackHasJob = fallbackJob ~= nil
+    })
+
+    return fallbackJob
 end
 
 function MetaBridge.getMoney(source, moneyType)
@@ -157,27 +197,12 @@ function MetaBridge.getItemFromSlot(source, slot)
     return nil
 end
 
-local function normalizeNotifyPayload(data)
-    if type(data) == 'string' then
-        return { description = data, type = 'inform' }
-    end
-
-    if type(data) == 'table' then
-        if data.message and not data.description then
-            data.description = data.message
-        end
-        return data
-    end
-
-    return { description = tostring(data), type = 'inform' }
-end
-
 function MetaBridge.notify(source, data)
     if BridgeConfig and BridgeConfig.notify and BridgeConfig.notify.server then
         return BridgeConfig.notify.server(source, data)
     end
 
-    local payload = normalizeNotifyPayload(data)
+    local payload = BridgeShared.normalizeNotifyPayload(data)
 
     if BridgeShared and BridgeShared.isStarted and BridgeShared.isStarted('ox_lib') then
         TriggerClientEvent('ox_lib:notify', source, payload)
@@ -202,6 +227,79 @@ function MetaBridge.notify(source, data)
     return false
 end
 
+function MetaBridge.registerCallback(...)
+    local args = table.pack(...)
+    local name = nil
+    local handler = nil
+
+    if type(args[1]) == 'string' and isCallable(args[2]) then
+        name = args[1]
+        handler = args[2]
+    else
+        for i = 1, args.n do
+            if type(args[i]) == 'string' then
+                name = args[i]
+                for j = i + 1, args.n do
+                    if isCallable(args[j]) then
+                        handler = args[j]
+                        break
+                    end
+                end
+                if handler then
+                    break
+                end
+            end
+        end
+    end
+
+    if type(name) ~= 'string' or not isCallable(handler) then
+        local signature = {}
+        for i = 1, args.n do
+            signature[i] = type(args[i])
+        end
+
+        BridgeShared.debug('server.callback', 'Rejected callback registration due to invalid args', {
+            signature = signature,
+            resolvedNameType = type(name),
+            resolvedHandlerType = type(handler)
+        })
+        return false
+    end
+
+    if not (type(args[1]) == 'string' and isCallable(args[2])) then
+        BridgeShared.debug('server.callback', 'Normalized registerCallback argument layout', {
+            callbackName = name
+        })
+    end
+
+    fallbackCallbacks[name] = handler
+    BridgeShared.debug('server.callback', 'Registered fallback callback', { name = name })
+    local registered = false
+
+    if BridgeConfig and BridgeConfig.callback and BridgeConfig.callback.serverRegister then
+        local ok, result = pcall(BridgeConfig.callback.serverRegister, name, handler)
+        if ok and result ~= false then
+            registered = true
+            BridgeShared.debug('server.callback', 'Registered via BridgeConfig callback provider', { name = name })
+        end
+    end
+
+    if lib and lib.callback and lib.callback.register then
+        local okOx, oxErr = pcall(lib.callback.register, name, handler)
+        if okOx then
+            registered = true
+            BridgeShared.debug('server.callback', 'Registered via ox_lib callback provider', { name = name })
+        else
+            BridgeShared.debug('server.callback', 'ox_lib callback registration failed', {
+                name = name,
+                error = tostring(oxErr)
+            })
+        end
+    end
+
+    return registered
+end
+
 function MetaBridge.addItem(source, itemName, amount, meta)
     if BridgeInventory and BridgeInventory.call then
         local result = BridgeInventory.call('addItem', source, itemName, amount, meta)
@@ -224,6 +322,50 @@ function MetaBridge.removeItem(source, itemName, amount, meta)
     return MetaBridge.call('removeItem', source, itemName, amount, meta)
 end
 
+function MetaBridge.canCarryWeight(source, weight)
+    if BridgeInventory and BridgeInventory.call then
+        local result = BridgeInventory.call('canCarryWeight', source, weight)
+        if result ~= nil then
+            return result ~= false
+        end
+    end
+
+    return true
+end
+
+function MetaBridge.getEmptySlot(source)
+    if BridgeInventory and BridgeInventory.call then
+        local result = BridgeInventory.call('getEmptySlot', source)
+        if result ~= nil then
+            return result
+        end
+    end
+
+    return true
+end
+
+function MetaBridge.getSlotsWithItem(source, itemName, meta)
+    if BridgeInventory and BridgeInventory.call then
+        local result = BridgeInventory.call('getSlotsWithItem', source, itemName, meta)
+        if type(result) == 'table' then
+            return result
+        end
+    end
+
+    return {}
+end
+
+function MetaBridge.setItemMetadata(source, slot, metadata)
+    if BridgeInventory and BridgeInventory.call then
+        local result = BridgeInventory.call('setItemMetadata', source, slot, metadata)
+        if result ~= nil then
+            return result ~= false
+        end
+    end
+
+    return false
+end
+
 function MetaBridge.setFuel(vehicle, fuel)
     return MetaBridge.call('setFuel', vehicle, fuel)
 end
@@ -233,6 +375,58 @@ function MetaBridge.giveVehicleKeys(source, plate)
 end
 
 if IsDuplicityVersion and IsDuplicityVersion() then
+    RegisterNetEvent('MetaBridge:invokeCallback', function(requestId, callbackName, packedArgs)
+        local src = source
+
+        BridgeShared.debug('server.callback', 'Received fallback callback invocation', {
+            source = src,
+            requestId = requestId,
+            callbackName = callbackName
+        })
+
+        if type(requestId) ~= 'number' or type(callbackName) ~= 'string' then
+            return
+        end
+
+        local handler = fallbackCallbacks[callbackName]
+        if type(handler) ~= 'function' then
+            BridgeShared.debug('server.callback', 'Fallback callback missing', { callbackName = callbackName })
+            TriggerClientEvent('MetaBridge:callbackResponse', src, requestId, false, {
+                n = 1,
+                [1] = ('callback %s does not exist'):format(callbackName)
+            })
+            return
+        end
+
+        local args = type(packedArgs) == 'table' and packedArgs or {}
+        local argCount = tonumber(args.n) or #args
+
+        local invocation = table.pack(pcall(function()
+            return handler(src, table.unpack(args, 1, argCount))
+        end))
+
+        BridgeShared.debug('server.callback', 'Fallback callback executed', {
+            callbackName = callbackName,
+            source = src,
+            success = invocation[1] == true
+        })
+
+        if not invocation[1] then
+            TriggerClientEvent('MetaBridge:callbackResponse', src, requestId, false, {
+                n = 1,
+                [1] = invocation[2]
+            })
+            return
+        end
+
+        local response = { n = invocation.n - 1 }
+        for i = 2, invocation.n do
+            response[i - 1] = invocation[i]
+        end
+
+        TriggerClientEvent('MetaBridge:callbackResponse', src, requestId, true, response)
+    end)
+
     RegisterNetEvent('MetaBridge:giveVehicleKeys', function(plate)
         local src = source
         MetaBridge.giveVehicleKeys(src, plate)

@@ -1,4 +1,215 @@
 BridgeShared = BridgeShared or {}
+BridgeConfig = BridgeConfig or {}
+
+if BridgeConfig.debug == nil then
+    BridgeConfig.debug = false
+end
+
+function BridgeShared.isDebugEnabled()
+    local cfg = BridgeConfig and BridgeConfig.debug
+    if cfg == true then
+        return true
+    end
+
+    if type(cfg) == 'table' then
+        return cfg.enabled == true
+    end
+
+    return false
+end
+
+function BridgeShared.debug(scope, message, payload)
+    if not BridgeShared.isDebugEnabled() then
+        return
+    end
+
+    local prefix = ('[metabridge:%s] %s'):format(scope or 'core', message or '')
+
+    if payload == nil then
+        print(prefix)
+        return
+    end
+
+    local encoded = nil
+    if json and json.encode then
+        local ok, result = pcall(json.encode, payload)
+        if ok then
+            encoded = result
+        end
+    end
+
+    if encoded == nil then
+        encoded = tostring(payload)
+    end
+
+    print(prefix .. ' | ' .. encoded)
+end
+
+function BridgeShared.resolveJobData(data)
+    if type(data) ~= 'table' then
+        return nil
+    end
+
+    if data.job ~= nil then
+        return data.job
+    end
+
+    if data.PlayerData and type(data.PlayerData) == 'table' and data.PlayerData.job ~= nil then
+        return data.PlayerData.job
+    end
+
+    if data.playerData and type(data.playerData) == 'table' and data.playerData.job ~= nil then
+        return data.playerData.job
+    end
+
+    if data.metadata and type(data.metadata) == 'table' and data.metadata.job ~= nil then
+        return data.metadata.job
+    end
+
+    if data.groups and type(data.groups) == 'table' then
+        if data.groups.job ~= nil then
+            return data.groups.job
+        end
+
+        for groupName, groupData in pairs(data.groups) do
+            if type(groupData) == 'table' and (groupData.name ~= nil or groupData.grade ~= nil or groupData.level ~= nil) then
+                if type(groupName) == 'string' and groupData.name == nil then
+                    groupData.name = groupName
+                end
+                return groupData
+            end
+        end
+    end
+
+    return nil
+end
+
+function BridgeShared.getExportFunction(resourceName, methodName, requireStarted)
+    if requireStarted ~= false and BridgeShared.isStarted and not BridgeShared.isStarted(resourceName) then
+        return nil
+    end
+
+    if not exports or not exports[resourceName] then
+        return nil
+    end
+
+    local resource = exports[resourceName]
+    local ok, fn = pcall(function()
+        return resource[methodName]
+    end)
+    if not ok or type(fn) ~= 'function' then
+        return nil
+    end
+
+    return function(...)
+        local args = { ... }
+
+        local invokeOk, result = pcall(function()
+            return fn(table.unpack(args))
+        end)
+        if invokeOk and result ~= nil then
+            return result
+        end
+
+        local invokeOkWithSelf, resultWithSelf = pcall(function()
+            return fn(resource, table.unpack(args))
+        end)
+        if invokeOkWithSelf then
+            return resultWithSelf
+        end
+
+        return nil
+    end
+end
+
+function BridgeShared.normalizeNotifyPayload(data)
+    if type(data) == 'string' then
+        return { description = data, type = 'inform' }
+    end
+
+    if type(data) == 'table' then
+        if data.message and not data.description then
+            data.description = data.message
+        end
+        return data
+    end
+
+    return { description = tostring(data), type = 'inform' }
+end
+
+function BridgeShared.callStartedResourceMethods(resourceName, methodNames, ...)
+    if not BridgeShared.isStarted(resourceName) then
+        return nil, false
+    end
+
+    for _, methodName in ipairs(methodNames) do
+        local fn = BridgeShared.getExportFunction(resourceName, methodName, true)
+        if fn then
+            local result = fn(...)
+            if result ~= nil then
+                return result, true
+            end
+        end
+    end
+
+    return nil, true
+end
+
+function BridgeShared.setFuel(vehicle, fuel)
+    if BridgeConfig and BridgeConfig.fuel and BridgeConfig.fuel.set then
+        return BridgeConfig.fuel.set(vehicle, fuel)
+    end
+
+    local result, started = BridgeShared.callStartedResourceMethods('LegacyFuel', { 'SetFuel' }, vehicle, fuel)
+    if result ~= nil then
+        return result
+    end
+    if started then
+        return true
+    end
+
+    result = BridgeShared.getExportFunction('ps-fuel', 'SetFuel', true)
+    if result then
+        local value = result(vehicle, fuel)
+        if value ~= nil then
+            return value
+        end
+    end
+
+    result = BridgeShared.getExportFunction('cdn-fuel', 'SetFuel', true)
+    if result then
+        local value = result(vehicle, fuel)
+        if value ~= nil then
+            return value
+        end
+    end
+
+    return false
+end
+
+function BridgeShared.giveVehicleKeys(source, plate, systems)
+    if BridgeConfig and BridgeConfig.keys and BridgeConfig.keys.give then
+        return BridgeConfig.keys.give(source, plate)
+    end
+
+    systems = systems or {
+        { resource = 'qb-vehiclekeys', methods = { 'GiveKeys', 'AddKeys' }, successOnStarted = true }
+    }
+
+    for _, system in ipairs(systems) do
+        local methods = system.methods or {}
+        local result, started = BridgeShared.callStartedResourceMethods(system.resource, methods, source, plate)
+        if result ~= nil then
+            return result
+        end
+
+        if started and system.successOnStarted ~= false then
+            return true
+        end
+    end
+
+    return false
+end
 
 local frameworkAliases = {
     ['qbcore'] = 'qbcore',

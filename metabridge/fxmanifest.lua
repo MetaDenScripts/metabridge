@@ -2,13 +2,12 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 
-author 'Ianarosh (FabioRosado)'
+author 'Ianarosh | MetaDen Scripts'
 description 'MetaDen Scripts | Bridge implementation to support various frameworks and inventories.'
-version '1.0.0'
-repository 'https://github.com/MetaDenScripts/metabridge'
-documentation 'https://github.com/MetaDenScripts/metabridge/tree/main/docs'
+version '1.0.3'
 
 shared_scripts {
+    '@ox_lib/init.lua',
     'resource/shared.lua',
     'init.lua'
 }
@@ -36,4 +35,8 @@ files {
 
 escrow_ignore {
     '**',
+}
+
+dependencies {
+    'ox_lib'
 }
