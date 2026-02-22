@@ -22,6 +22,31 @@ local function getESX()
     return ESX
 end
 
+local function generatePlate()
+    if lib and lib.string and lib.string.random then
+        return lib.string.random('........'):upper()
+    end
+
+    return ('MB%s'):format(math.random(100000, 999999))
+end
+
+local function decodeJsonTable(value)
+    if type(value) == 'table' then
+        return value
+    end
+
+    if type(value) ~= 'string' or value == '' then
+        return nil
+    end
+
+    local ok, decoded = pcall(json.decode, value)
+    if not ok or type(decoded) ~= 'table' then
+        return nil
+    end
+
+    return decoded
+end
+
 function BridgeAdapters.esx.getPlayer(source)
     local esx = getESX()
     if not esx then
@@ -150,4 +175,111 @@ function BridgeAdapters.esx.giveVehicleKeys(source, plate)
     return BridgeShared.giveVehicleKeys(source, plate, {
         { resource = 'esx_vehiclelock', methods = { 'givePlayerKeys', 'GiveKeys' }, successOnStarted = true }
     })
+end
+
+function BridgeAdapters.esx.createOwnedVehicle(request)
+    if type(request) ~= 'table' then
+        return nil
+    end
+
+    local ownerIdentifier = request.ownerIdentifier
+    if type(ownerIdentifier) ~= 'string' or ownerIdentifier == '' then
+        return nil
+    end
+
+    local model = request.model
+    if type(model) ~= 'string' or model == '' then
+        return nil
+    end
+
+    local props = type(request.props) == 'table' and request.props or {}
+    if not props.plate then
+        props.plate = generatePlate()
+    end
+    props.model = props.model or joaat(model)
+
+    local vehicleId = MySQL.insert.await(
+        'INSERT INTO owned_vehicles (`owner`, `plate`, `vehicle`, `type`, `stored`) VALUES (?, ?, ?, ?, ?)',
+        {
+            ownerIdentifier,
+            props.plate,
+            json.encode(props),
+            request.vehicleType or 'car',
+            1,
+        }
+    )
+
+    if not vehicleId then
+        return nil
+    end
+
+    return {
+        id = vehicleId,
+        model = model,
+        plate = props.plate,
+        props = props,
+        ownerIdentifier = ownerIdentifier,
+    }
+end
+
+function BridgeAdapters.esx.getOwnedVehicle(lookup)
+    if type(lookup) ~= 'table' then
+        return nil
+    end
+
+    local record = nil
+    if lookup.id then
+        record = MySQL.single.await('SELECT id, owner, plate, vehicle FROM owned_vehicles WHERE id = ? LIMIT 1',
+            { lookup.id })
+    elseif lookup.plate then
+        record = MySQL.single.await('SELECT id, owner, plate, vehicle FROM owned_vehicles WHERE plate = ? LIMIT 1',
+            { lookup.plate })
+    end
+
+    if not record then
+        return nil
+    end
+
+    local props = decodeJsonTable(record.vehicle)
+    return {
+        id = record.id,
+        model = props and props.model,
+        plate = record.plate,
+        props = props,
+        ownerIdentifier = record.owner,
+    }
+end
+
+function BridgeAdapters.esx.spawnOwnedVehicle(request)
+    if type(request) ~= 'table' then
+        return nil
+    end
+
+    local coords = request.coords
+    local model = request.model
+    if type(coords) ~= 'table' or not model then
+        return nil
+    end
+
+    if type(CreateVehicleServerSetter) ~= 'function' then
+        return nil
+    end
+
+    local modelHash = type(model) == 'number' and model or joaat(model)
+    local heading = tonumber(request.heading) or tonumber(coords.w) or 0.0
+    local veh = CreateVehicleServerSetter(modelHash, 'automobile', coords.x, coords.y, coords.z, heading)
+    if not veh or veh == 0 then
+        return nil
+    end
+
+    local plate = request.plate or (request.props and request.props.plate)
+    if plate then
+        SetVehicleNumberPlateText(veh, plate)
+    end
+
+    return {
+        entity = veh,
+        netId = NetworkGetNetworkIdFromEntity(veh),
+        plate = plate,
+    }
 end

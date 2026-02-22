@@ -2,7 +2,7 @@ BridgeShared = BridgeShared or {}
 BridgeConfig = BridgeConfig or {}
 
 if BridgeConfig.debug == nil then
-    BridgeConfig.debug = false
+    BridgeConfig.debug = true
 end
 
 function BridgeShared.isDebugEnabled()

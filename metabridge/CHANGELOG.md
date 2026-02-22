@@ -1,5 +1,18 @@
 ## [1.0.3] - 2026-02-20
 
+### Added
+- Server bridge inventory methods:
+  - `getItemDefinition(source, itemName)`
+  - `removeItemExact(source, itemName, amount, meta, slot)`
+  - `registerCreateItemHook(handler, options)`
+- Server callbacks for client-side inventory abstractions:
+  - `MetaBridge:getItemCount`
+  - `MetaBridge:getItemDefinition`
+- Client bridge methods:
+  - `getItemCount(itemName, meta)`
+  - `hasItem(itemName, amount, meta)`
+  - `displayMetadata(metadataMap)`
+
 ### Fixed
 - Fixed `requestCallbackAwait` in `resource/client.lua` to preserve all return values from `lib.callback.await` (including multi-return responses).
 - Hardened `getJob` resolution for QBCore/Qbox and added fallback extraction from normalized player payloads to reduce unexpected `nil` job results.
@@ -9,6 +22,9 @@
 - Centralized repeated vehicle helper logic (`setFuel`, `giveVehicleKeys`) in `resource/shared.lua` and reused it across framework adapters.
 - Converted `adapters/*.lua` and `inventories/*.lua` to shim-only compatibility files that forward-load canonical implementations.
 - Removed leftover duplicate/unused helper logic from active framework files during cleanup.
+- Extended inventory adapters with item-definition and exact-removal support.
+- Updated `ox_inventory` adapter to support bridge-level `createItem` hook registration.
+- Enabled downstream resources to stop calling `ox_inventory` directly for item counts, metadata display, and slot-targeted removals.
 
 ### Compatibility
 - Public exports, events, and method signatures remain unchanged.

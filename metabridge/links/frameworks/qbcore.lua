@@ -14,6 +14,31 @@ local function getCore()
     return QBCore
 end
 
+local function generatePlate()
+    if lib and lib.string and lib.string.random then
+        return lib.string.random('........'):upper()
+    end
+
+    return ('MB%s'):format(math.random(100000, 999999))
+end
+
+local function decodeJsonTable(value)
+    if type(value) == 'table' then
+        return value
+    end
+
+    if type(value) ~= 'string' or value == '' then
+        return nil
+    end
+
+    local ok, decoded = pcall(json.decode, value)
+    if not ok or type(decoded) ~= 'table' then
+        return nil
+    end
+
+    return decoded
+end
+
 function BridgeAdapters.qbcore.getPlayer(source)
     local core = getCore()
     if not core or not core.Functions then
@@ -142,4 +167,114 @@ end
 
 function BridgeAdapters.qbcore.giveVehicleKeys(source, plate)
     return BridgeShared.giveVehicleKeys(source, plate)
+end
+
+function BridgeAdapters.qbcore.createOwnedVehicle(request)
+    if type(request) ~= 'table' then
+        return nil
+    end
+
+    local ownerIdentifier = request.ownerIdentifier or request.citizenid
+    if type(ownerIdentifier) ~= 'string' or ownerIdentifier == '' then
+        return nil
+    end
+
+    local model = request.model
+    if type(model) ~= 'string' or model == '' then
+        return nil
+    end
+
+    local props = type(request.props) == 'table' and request.props or {}
+    if not props.plate then
+        props.plate = generatePlate()
+    end
+    props.model = props.model or joaat(model)
+
+    local vehicleId = MySQL.insert.await(
+        'INSERT INTO player_vehicles (license, citizenid, vehicle, hash, mods, plate, state, garage) VALUES ((SELECT license FROM players WHERE citizenid = ? LIMIT 1), ?, ?, ?, ?, ?, ?, ?)',
+        {
+            ownerIdentifier,
+            ownerIdentifier,
+            model,
+            props.model,
+            json.encode(props),
+            props.plate,
+            request.garage and 1 or 0,
+            request.garage
+        }
+    )
+
+    if not vehicleId then
+        return nil
+    end
+
+    return {
+        id = vehicleId,
+        model = model,
+        plate = props.plate,
+        props = props,
+        ownerIdentifier = ownerIdentifier,
+    }
+end
+
+function BridgeAdapters.qbcore.getOwnedVehicle(lookup)
+    if type(lookup) ~= 'table' then
+        return nil
+    end
+
+    local record = nil
+    if lookup.id then
+        record = MySQL.single.await('SELECT id, citizenid, vehicle, mods, plate FROM player_vehicles WHERE id = ? LIMIT 1',
+            { lookup.id })
+    elseif lookup.plate then
+        record = MySQL.single.await(
+            'SELECT id, citizenid, vehicle, mods, plate FROM player_vehicles WHERE plate = ? LIMIT 1',
+            { lookup.plate })
+    end
+
+    if not record then
+        return nil
+    end
+
+    return {
+        id = record.id,
+        model = record.vehicle,
+        plate = record.plate,
+        props = decodeJsonTable(record.mods),
+        ownerIdentifier = record.citizenid,
+    }
+end
+
+function BridgeAdapters.qbcore.spawnOwnedVehicle(request)
+    if type(request) ~= 'table' then
+        return nil
+    end
+
+    local coords = request.coords
+    local model = request.model
+    if type(coords) ~= 'table' or not model then
+        return nil
+    end
+
+    if type(CreateVehicleServerSetter) ~= 'function' then
+        return nil
+    end
+
+    local modelHash = type(model) == 'number' and model or joaat(model)
+    local heading = tonumber(request.heading) or tonumber(coords.w) or 0.0
+    local veh = CreateVehicleServerSetter(modelHash, 'automobile', coords.x, coords.y, coords.z, heading)
+    if not veh or veh == 0 then
+        return nil
+    end
+
+    local plate = request.plate or (request.props and request.props.plate)
+    if plate then
+        SetVehicleNumberPlateText(veh, plate)
+    end
+
+    return {
+        entity = veh,
+        netId = NetworkGetNetworkIdFromEntity(veh),
+        plate = plate,
+    }
 end

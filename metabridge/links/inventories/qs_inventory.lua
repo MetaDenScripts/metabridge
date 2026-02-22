@@ -25,6 +25,14 @@ function qsInventory.getItemData(source, itemName, meta)
     return { amount = count or 0 }
 end
 
+function qsInventory.getItemDefinition(source, itemName)
+    return {
+        name = itemName,
+        label = itemName,
+        weight = 0,
+    }
+end
+
 function qsInventory.getItemCount(source, itemName, meta)
     return callExport('qs-inventory', 'GetItemTotalAmount', source, itemName) or 0
 end
@@ -35,4 +43,8 @@ end
 
 function qsInventory.removeItem(source, itemName, amount, meta)
     return callExport('qs-inventory', 'RemoveItem', source, itemName, amount or 1, nil) == true
+end
+
+function qsInventory.removeItemExact(source, itemName, amount, meta, slot)
+    return qsInventory.removeItem(source, itemName, amount, meta)
 end

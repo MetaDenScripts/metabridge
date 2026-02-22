@@ -176,3 +176,111 @@ end
 function BridgeAdapters.qbox.giveVehicleKeys(source, plate)
     return BridgeShared.giveVehicleKeys(source, plate)
 end
+
+function BridgeAdapters.qbox.createOwnedVehicle(request)
+    if type(request) ~= 'table' then
+        return nil
+    end
+
+    if not exports or not exports.qbx_vehicles then
+        return nil
+    end
+
+    local ownerIdentifier = request.ownerIdentifier or request.citizenid
+    if type(ownerIdentifier) ~= 'string' or ownerIdentifier == '' then
+        return nil
+    end
+
+    local model = request.model
+    if type(model) ~= 'string' or model == '' then
+        return nil
+    end
+
+    local createRequest = {
+        model = model,
+        citizenid = ownerIdentifier,
+        garage = request.garage,
+        props = request.props
+    }
+
+    local vehicleId = exports.qbx_vehicles:CreatePlayerVehicle(createRequest)
+    if not vehicleId then
+        return nil
+    end
+
+    local ownedVehicle = exports.qbx_vehicles:GetPlayerVehicle(vehicleId)
+    if not ownedVehicle then
+        return {
+            id = vehicleId,
+            model = model,
+            ownerIdentifier = ownerIdentifier,
+        }
+    end
+
+    return {
+        id = vehicleId,
+        plate = ownedVehicle.plate or (ownedVehicle.props and ownedVehicle.props.plate),
+        model = ownedVehicle.modelName or ownedVehicle.vehicle or model,
+        props = ownedVehicle.props,
+        ownerIdentifier = ownedVehicle.citizenid or ownerIdentifier,
+    }
+end
+
+function BridgeAdapters.qbox.getOwnedVehicle(lookup)
+    if type(lookup) ~= 'table' or not exports or not exports.qbx_vehicles then
+        return nil
+    end
+
+    local vehicleId = lookup.id or lookup.vehicleId
+    if vehicleId == nil then
+        return nil
+    end
+
+    local ownedVehicle = exports.qbx_vehicles:GetPlayerVehicle(vehicleId)
+    if not ownedVehicle then
+        return nil
+    end
+
+    return {
+        id = ownedVehicle.id or vehicleId,
+        plate = ownedVehicle.plate or (ownedVehicle.props and ownedVehicle.props.plate),
+        model = ownedVehicle.modelName or ownedVehicle.vehicle,
+        props = ownedVehicle.props,
+        ownerIdentifier = ownedVehicle.citizenid,
+    }
+end
+
+function BridgeAdapters.qbox.spawnOwnedVehicle(request)
+    if type(request) ~= 'table' then
+        return nil
+    end
+
+    if type(qbx) ~= 'table' or type(qbx.spawnVehicle) ~= 'function' then
+        return nil
+    end
+
+    local model = request.model
+    local coords = request.coords
+    if type(coords) ~= 'table' then
+        return nil
+    end
+
+    local heading = tonumber(request.heading) or tonumber(coords.w) or 0.0
+
+    local netId, vehicle = qbx.spawnVehicle({
+        model = model,
+        spawnSource = vector4(coords.x, coords.y, coords.z, heading),
+        props = request.props,
+        warp = request.warp
+    })
+
+    if not vehicle then
+        return nil
+    end
+
+    return {
+        netId = netId,
+        entity = vehicle,
+        plate = request.plate or (request.props and request.props.plate),
+    }
+end

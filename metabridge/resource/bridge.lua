@@ -163,6 +163,22 @@ function MetaBridge.getItemData(source, itemName, meta)
     return nil
 end
 
+function MetaBridge.getItemDefinition(source, itemName)
+    if BridgeInventory and BridgeInventory.call then
+        local definition = BridgeInventory.call('getItemDefinition', source, itemName)
+        if definition ~= nil then
+            return definition
+        end
+    end
+
+    local itemData = MetaBridge.getItemData(source, itemName)
+    if type(itemData) == 'table' then
+        return itemData
+    end
+
+    return nil
+end
+
 function MetaBridge.getItemCount(source, itemName, meta)
     if BridgeInventory and BridgeInventory.call then
         local count = BridgeInventory.call('getItemCount', source, itemName, meta)
@@ -184,13 +200,6 @@ function MetaBridge.getItemFromSlot(source, slot)
         local itemData = BridgeInventory.call('getItemFromSlot', source, slot)
         if itemData ~= nil then
             return itemData
-        end
-    end
-
-    if type(slot) == 'number' and exports and exports.ox_inventory and exports.ox_inventory.GetSlot then
-        local itemInSlot = exports.ox_inventory:GetSlot(source, slot)
-        if itemInSlot then
-            return { name = itemInSlot.name, metadata = itemInSlot.metadata }
         end
     end
 
@@ -322,6 +331,17 @@ function MetaBridge.removeItem(source, itemName, amount, meta)
     return MetaBridge.call('removeItem', source, itemName, amount, meta)
 end
 
+function MetaBridge.removeItemExact(source, itemName, amount, meta, slot)
+    if BridgeInventory and BridgeInventory.call then
+        local result = BridgeInventory.call('removeItemExact', source, itemName, amount, meta, slot)
+        if result ~= nil then
+            return result
+        end
+    end
+
+    return MetaBridge.removeItem(source, itemName, amount, meta)
+end
+
 function MetaBridge.canCarryWeight(source, weight)
     if BridgeInventory and BridgeInventory.call then
         local result = BridgeInventory.call('canCarryWeight', source, weight)
@@ -366,6 +386,17 @@ function MetaBridge.setItemMetadata(source, slot, metadata)
     return false
 end
 
+function MetaBridge.registerCreateItemHook(handler, options)
+    if BridgeInventory and BridgeInventory.call then
+        local result = BridgeInventory.call('registerCreateItemHook', handler, options)
+        if result ~= nil then
+            return result ~= false
+        end
+    end
+
+    return false
+end
+
 function MetaBridge.setFuel(vehicle, fuel)
     return MetaBridge.call('setFuel', vehicle, fuel)
 end
@@ -374,7 +405,33 @@ function MetaBridge.giveVehicleKeys(source, plate)
     return MetaBridge.call('giveVehicleKeys', source, plate)
 end
 
+function MetaBridge.createOwnedVehicle(request)
+    if BridgeConfig and BridgeConfig.vehicle and BridgeConfig.vehicle.server and BridgeConfig.vehicle.server.create then
+        return BridgeConfig.vehicle.server.create(request)
+    end
+
+    return MetaBridge.call('createOwnedVehicle', request)
+end
+
+function MetaBridge.getOwnedVehicle(lookup)
+    if BridgeConfig and BridgeConfig.vehicle and BridgeConfig.vehicle.server and BridgeConfig.vehicle.server.get then
+        return BridgeConfig.vehicle.server.get(lookup)
+    end
+
+    return MetaBridge.call('getOwnedVehicle', lookup)
+end
+
+function MetaBridge.spawnOwnedVehicle(request)
+    if BridgeConfig and BridgeConfig.vehicle and BridgeConfig.vehicle.server and BridgeConfig.vehicle.server.spawn then
+        return BridgeConfig.vehicle.server.spawn(request)
+    end
+
+    return MetaBridge.call('spawnOwnedVehicle', request)
+end
+
 if IsDuplicityVersion and IsDuplicityVersion() then
+    local registerCoreCallbacks = GetCurrentResourceName and GetCurrentResourceName() == 'metabridge'
+
     RegisterNetEvent('MetaBridge:invokeCallback', function(requestId, callbackName, packedArgs)
         local src = source
 
@@ -431,4 +488,26 @@ if IsDuplicityVersion and IsDuplicityVersion() then
         local src = source
         MetaBridge.giveVehicleKeys(src, plate)
     end)
+
+    if registerCoreCallbacks then
+        MetaBridge.registerCallback('MetaBridge:getPlayerData', function(source)
+            return MetaBridge.getPlayerData(source)
+        end)
+
+        MetaBridge.registerCallback('MetaBridge:getIdentifier', function(source)
+            return MetaBridge.getIdentifier(source)
+        end)
+
+        MetaBridge.registerCallback('MetaBridge:getJob', function(source)
+            return MetaBridge.getJob(source)
+        end)
+
+        MetaBridge.registerCallback('MetaBridge:getItemCount', function(source, itemName, meta)
+            return MetaBridge.getItemCount(source, itemName, meta)
+        end)
+
+        MetaBridge.registerCallback('MetaBridge:getItemDefinition', function(source, itemName)
+            return MetaBridge.getItemDefinition(source, itemName)
+        end)
+    end
 end

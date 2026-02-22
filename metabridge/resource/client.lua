@@ -3,6 +3,8 @@ MetaBridgeClient = MetaBridgeClient or {}
 local QBCore = QBCore
 local callbackRequestId = 0
 local pendingCallbacks = {}
+local playerLoadedHandlers = {}
+local hasEmittedPlayerLoaded = false
 
 local function getQBCore()
     if QBCore then
@@ -40,6 +42,133 @@ end
 
 function MetaBridgeClient.isReady()
     return MetaBridgeClient.getFramework() ~= nil
+end
+
+local function resolveJobData(data)
+    if type(data) ~= 'table' then
+        return nil
+    end
+
+    if data.job ~= nil then
+        return data.job
+    end
+
+    if data.PlayerData and type(data.PlayerData) == 'table' and data.PlayerData.job ~= nil then
+        return data.PlayerData.job
+    end
+
+    if data.playerData and type(data.playerData) == 'table' and data.playerData.job ~= nil then
+        return data.playerData.job
+    end
+
+    if data.metadata and type(data.metadata) == 'table' and data.metadata.job ~= nil then
+        return data.metadata.job
+    end
+
+    if data.groups and type(data.groups) == 'table' then
+        if data.groups.job ~= nil then
+            return data.groups.job
+        end
+
+        for groupName, groupData in pairs(data.groups) do
+            if type(groupData) == 'table' and (groupData.name ~= nil or groupData.grade ~= nil or groupData.level ~= nil) then
+                if type(groupName) == 'string' and groupData.name == nil then
+                    groupData.name = groupName
+                end
+                return groupData
+            end
+        end
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.getPlayerData()
+    local framework = MetaBridgeClient.getFramework()
+
+    if framework == 'qbcore' then
+        local core = getQBCore()
+        if core and core.Functions and core.Functions.GetPlayerData then
+            local playerData = core.Functions.GetPlayerData()
+            if type(playerData) == 'table' then
+                return playerData
+            end
+        end
+    elseif framework == 'qbox' then
+        if exports and exports.qbx_core and exports.qbx_core.GetPlayerData then
+            local ok, playerData = pcall(function()
+                return exports.qbx_core:GetPlayerData()
+            end)
+            if ok and type(playerData) == 'table' then
+                return playerData
+            end
+        end
+
+        if type(QBX) == 'table' and type(QBX.PlayerData) == 'table' then
+            return QBX.PlayerData
+        end
+    elseif framework == 'esx' then
+        if type(ESX) == 'table' and type(ESX.PlayerData) == 'table' then
+            return ESX.PlayerData
+        end
+    end
+
+    local serverData = MetaBridgeClient.requestCallbackAwait('MetaBridge:getPlayerData')
+    if type(serverData) == 'table' then
+        return serverData
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.getIdentifier()
+    local playerData = MetaBridgeClient.getPlayerData()
+    if type(playerData) == 'table' then
+        if type(playerData.citizenid) == 'string' and playerData.citizenid ~= '' then
+            return playerData.citizenid
+        end
+
+        if type(playerData.identifier) == 'string' and playerData.identifier ~= '' then
+            return playerData.identifier
+        end
+    end
+
+    return MetaBridgeClient.requestCallbackAwait('MetaBridge:getIdentifier')
+end
+
+function MetaBridgeClient.getJob()
+    local playerData = MetaBridgeClient.getPlayerData()
+    local job = resolveJobData(playerData)
+    if job ~= nil then
+        return job
+    end
+
+    return MetaBridgeClient.requestCallbackAwait('MetaBridge:getJob')
+end
+
+local function emitPlayerLoaded(payload)
+    hasEmittedPlayerLoaded = true
+    for _, handler in ipairs(playerLoadedHandlers) do
+        handler(payload)
+    end
+end
+
+function MetaBridgeClient.onPlayerLoaded(handler)
+    if type(handler) ~= 'function' then
+        return false
+    end
+
+    playerLoadedHandlers[#playerLoadedHandlers + 1] = handler
+
+    if hasEmittedPlayerLoaded then
+        handler({
+            source = GetPlayerServerId(PlayerId()),
+            playerData = MetaBridgeClient.getPlayerData(),
+            framework = MetaBridgeClient.getFramework()
+        })
+    end
+
+    return true
 end
 
 function MetaBridgeClient.setFuel(vehicle, fuel)
@@ -143,14 +272,39 @@ function MetaBridgeClient.setEntityAsNoLongerNeeded(entity)
 end
 
 function MetaBridgeClient.getItemLabel(itemName)
-    if exports and exports.ox_inventory and exports.ox_inventory.Items then
-        local oxItem = exports.ox_inventory:Items(itemName)
-        if oxItem and oxItem.label then
-            return oxItem.label
-        end
+    local definition = MetaBridgeClient.requestCallbackAwait('MetaBridge:getItemDefinition', itemName)
+    if type(definition) == 'table' and type(definition.label) == 'string' and definition.label ~= '' then
+        return definition.label
     end
 
     return itemName
+end
+
+function MetaBridgeClient.getItemCount(itemName, meta)
+    local count = MetaBridgeClient.requestCallbackAwait('MetaBridge:getItemCount', itemName, meta)
+    return tonumber(count) or 0
+end
+
+function MetaBridgeClient.hasItem(itemName, amount, meta)
+    local requiredAmount = tonumber(amount) or 1
+    if requiredAmount < 1 then
+        requiredAmount = 1
+    end
+
+    return MetaBridgeClient.getItemCount(itemName, meta) >= requiredAmount
+end
+
+function MetaBridgeClient.displayMetadata(metadataMap)
+    if BridgeConfig and BridgeConfig.inventory and BridgeConfig.inventory.displayMetadata then
+        return BridgeConfig.inventory.displayMetadata(metadataMap)
+    end
+
+    if exports and exports.ox_inventory and exports.ox_inventory.displayMetadata then
+        exports.ox_inventory:displayMetadata(metadataMap)
+        return true
+    end
+
+    return false
 end
 
 function MetaBridgeClient.getItemImage(itemName)
@@ -509,3 +663,36 @@ function MetaBridgeClient.addTargetModel(models, options)
 
     return false
 end
+
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function(...)
+    emitPlayerLoaded({
+        source = GetPlayerServerId(PlayerId()),
+        playerData = MetaBridgeClient.getPlayerData(),
+        framework = MetaBridgeClient.getFramework(),
+        event = 'QBCore:Client:OnPlayerLoaded',
+        args = { ... }
+    })
+end)
+
+RegisterNetEvent('esx:playerLoaded', function(...)
+    emitPlayerLoaded({
+        source = GetPlayerServerId(PlayerId()),
+        playerData = MetaBridgeClient.getPlayerData(),
+        framework = MetaBridgeClient.getFramework(),
+        event = 'esx:playerLoaded',
+        args = { ... }
+    })
+end)
+
+CreateThread(function()
+    Wait(500)
+    local playerData = MetaBridgeClient.getPlayerData()
+    if type(playerData) == 'table' and next(playerData) ~= nil then
+        emitPlayerLoaded({
+            source = GetPlayerServerId(PlayerId()),
+            playerData = playerData,
+            framework = MetaBridgeClient.getFramework(),
+            event = 'bootstrap'
+        })
+    end
+end)

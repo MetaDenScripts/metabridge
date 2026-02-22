@@ -22,6 +22,10 @@ function InventoryAdapters.ox_inventory.getItemData(source, itemName, meta)
     return callExport('ox_inventory', 'GetItem', source, itemName, meta) or {}
 end
 
+function InventoryAdapters.ox_inventory.getItemDefinition(source, itemName)
+    return callExport('ox_inventory', 'Items', itemName)
+end
+
 function InventoryAdapters.ox_inventory.getItemCount(source, itemName, meta)
     local data = InventoryAdapters.ox_inventory.getItemData(source, itemName, meta)
     return data.count or data.amount or 0
@@ -71,6 +75,17 @@ function InventoryAdapters.ox_inventory.removeItem(source, itemName, amount, met
     end
 
     return remaining == 0
+end
+
+function InventoryAdapters.ox_inventory.removeItemExact(source, itemName, amount, meta, slot)
+    amount = amount or 1
+
+    if type(slot) == 'number' then
+        local removed = callExport('ox_inventory', 'RemoveItem', source, itemName, amount, meta, slot)
+        return removed == true
+    end
+
+    return InventoryAdapters.ox_inventory.removeItem(source, itemName, amount, meta)
 end
 
 function InventoryAdapters.ox_inventory.getItemFromSlot(source, slot)
@@ -155,4 +170,13 @@ function InventoryAdapters.ox_inventory.setItemMetadata(source, slot, metadata)
     end
 
     return result ~= nil
+end
+
+function InventoryAdapters.ox_inventory.registerCreateItemHook(handler, options)
+    if type(handler) ~= 'function' then
+        return false
+    end
+
+    local hookId = callExport('ox_inventory', 'registerHook', 'createItem', handler, options)
+    return hookId ~= nil
 end

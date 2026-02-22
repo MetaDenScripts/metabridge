@@ -24,6 +24,14 @@ function codemInventory.getItemData(source, itemName, meta)
     return callExport('codem-inventory', 'GetItemsByName', source, itemName) or {}
 end
 
+function codemInventory.getItemDefinition(source, itemName)
+    return {
+        name = itemName,
+        label = itemName,
+        weight = 0,
+    }
+end
+
 function codemInventory.getItemCount(source, itemName, meta)
     return callExport('codem-inventory', 'GetItemsTotalAmount', source, itemName) or 0
 end
@@ -34,4 +42,8 @@ end
 
 function codemInventory.removeItem(source, itemName, amount, meta)
     return callExport('codem-inventory', 'RemoveItem', source, itemName, amount or 1, nil) == true
+end
+
+function codemInventory.removeItemExact(source, itemName, amount, meta, slot)
+    return codemInventory.removeItem(source, itemName, amount, meta)
 end

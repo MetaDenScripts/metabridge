@@ -1,101 +1,251 @@
-metabridge
-==========
+# metabridge
 
-Summary
-- Framework and inventory bridge for FiveM resources.
-- Exposes a stable server/client export API while delegating to configured adapters.
+Framework, inventory, callback, target/UI, and dispatch bridge for FiveM resources.
 
-Requirements
-- `ox_lib` (declared dependency in `fxmanifest.lua`).
-- At least one supported framework adapter in `links/frameworks`.
-- Optional inventory adapter in `links/inventories` (falls back to `framework` inventory adapter).
+`metabridge` gives you one stable API (`MetaBridge` server, `MetaBridgeClient` client) and routes calls to the active framework/inventory/dispatch adapters.
 
-Setup
-- Ensure resource is started before resources that use it.
-- Configure `BridgeConfig` in `init.lua` as needed:
-  - `framework`
-  - `inventory`
-  - `debug` (set to `true` to log bridge resolution and adapter call diagnostics)
-  - optional custom handlers for notify, callbacks, target, etc.
+## Architecture
 
-Server API Reference
---------------------
+- Core server runtime: `resource/bridge.lua`
+- Core client runtime: `resource/client.lua`
+- Dispatch client extension: `links/dispatch/client.lua`
+- Export surfaces: `exports/server.lua`, `exports/client.lua`
+- Global loader: `init.lua`
 
-Core
-- `init()` → resolves framework adapter and initializes bridge.
-- `getFramework()` → returns active framework key.
-- `isReady()` → returns `true` if active framework adapter is ready.
-- `register(methodName, handler)` → registers override handler.
-- `call(methodName, ...)` → calls active adapter method.
+## Requirements
 
-Player / Framework
-- `getPlayer(source)`
-- `getPlayerData(source)`
-- `getIdentifier(source)`
-- `getJob(source)`
-- `getMoney(source, moneyType)`
+- `ox_lib` (dependency in `fxmanifest.lua`)
+- One supported framework adapter (auto-detected or configured via `BridgeConfig.framework`)
+- Optional inventory/dispatch systems (auto-detected or configured)
 
-Inventory
-- `hasItem(source, itemName, amount)`
-- `getItemData(source, itemName, meta)`
-- `getItemCount(source, itemName, meta)`
-- `getItemFromSlot(source, slot)`
-- `addItem(source, itemName, amount, meta)`
-- `removeItem(source, itemName, amount, meta)`
-- `canCarryWeight(source, weight)`
-- `getEmptySlot(source)`
-- `getSlotsWithItem(source, itemName, meta)`
-- `setItemMetadata(source, slot, metadata)`
+## Setup
 
-Notify / Callback
-- `notify(source, data)`
-- `registerCallback(name, handler)`
+### Style 1: Use exports (recommended)
 
-Vehicle
-- `setFuel(vehicle, fuel)`
-- `giveVehicleKeys(source, plate)`
+Add dependency order in your resource manifest, then call bridge exports directly.
 
-Client API Reference
---------------------
+```lua
+dependency 'metabridge'
+```
 
-General
-- `getFramework()`
-- `isReady()`
+Server example:
 
-Vehicle / Entity
-- `setFuel(vehicle, fuel)`
-- `giveVehicleKeys(plate)`
-- `spawnPed(model, coords, heading, networked)`
-- `spawnVehicle(model, coords, heading, networked)`
-- `setEntityAsNoLongerNeeded(entity)`
+```lua
+local Bridge = exports['metabridge']
+local framework = Bridge:getFramework()
+```
 
-Item / UI
-- `getItemLabel(itemName)`
-- `getItemImage(itemName)`
-- `notify(data)`
-- `progressBar(data)`
-- `registerContext(data)`
-- `showContext(contextId)`
-- `inputDialog(title, rows)`
+Client example:
 
-Callbacks
-- `requestCallback(name, cb, ...)`
-- `requestCallbackAwait(name, ...)`
+```lua
+local Bridge = exports['metabridge']
+Bridge:notify({ type = 'success', description = 'Bridge ready' })
+```
 
-Target / TextUI
-- `addTargetModel(models, options)`
-- `addTargetBoxZone(data)`
-- `addTargetSphereZone(data)`
-- `removeTargetZone(zoneId)`
-- `showTextUI(text, options)`
-- `hideTextUI()`
-- `isTextUIOpen()`
+### Style 2: Import globals with `@metabridge/init.lua`
 
-Notes
-- All server exports are auto-published from `MetaBridge` in `exports/server.lua`.
-- All client exports are wrapped in `exports/client.lua`.
-- Adapter capability varies by framework/inventory; methods return safe defaults where adapters do not implement a feature.
-- Canonical framework adapters live in `links/frameworks/*.lua`.
-- Canonical inventory adapters live in `links/inventories/*.lua`.
-- `adapters/*.lua` and `inventories/*.lua` are shim-only compatibility files and should not contain runtime logic.
-- New adapter or inventory logic should only be implemented in `links/frameworks/*.lua` and `links/inventories/*.lua`.
+In your manifest:
+
+```lua
+shared_scripts {
+  '@metabridge/init.lua'
+}
+```
+
+This exposes globals:
+
+- Server: `MetaBridge`
+- Client: `MetaBridgeClient`
+
+Important: `init.lua` force-sets `BridgeConfig.debug = true`.
+
+## Typing Notes
+
+- Signatures use lightweight Lua-friendly hints: `name:type` and `-> returnType`.
+- Common scalar aliases used in this README: `source:number`, `itemName:string`, `plate:string`.
+- Adapter-specific payloads/results are intentionally typed as `table`, `table|nil`, or `any`.
+- `nil` in a return type indicates the method can fail or the adapter may not provide data.
+
+## Server API (`MetaBridge`)
+
+### Core
+
+- `init() -> string|nil`
+- `getFramework() -> string|nil`
+- `isReady() -> boolean`
+- `register(methodName:string, handler:function) -> nil`
+- `call(methodName:string, ...) -> any`
+
+### Player / Framework
+
+- `getPlayer(source:number) -> any|nil`
+- `getPlayerData(source:number) -> table|nil`
+- `getIdentifier(source:number) -> string|nil`
+- `getJob(source:number) -> table|nil`
+- `getMoney(source:number, moneyType:string|nil) -> number|nil`
+
+### Inventory
+
+- `hasItem(source:number, itemName:string, amount:number|nil) -> boolean`
+- `getItemData(source:number, itemName:string, meta:table|nil) -> table|nil`
+- `getItemDefinition(source:number, itemName:string) -> table|nil`
+- `getItemCount(source:number, itemName:string, meta:table|nil) -> number`
+- `getItemFromSlot(source:number, slot:number) -> table|nil`
+- `addItem(source:number, itemName:string, amount:number, meta:table|nil) -> boolean`
+- `removeItem(source:number, itemName:string, amount:number, meta:table|nil) -> boolean`
+- `removeItemExact(source:number, itemName:string, amount:number, meta:table|nil, slot:number|nil) -> boolean`
+- `canCarryWeight(source:number, weight:number) -> boolean`
+- `getEmptySlot(source:number) -> number|boolean|nil`
+- `getSlotsWithItem(source:number, itemName:string, meta:table|nil) -> table`
+- `setItemMetadata(source:number, slot:number, metadata:table) -> boolean`
+- `registerCreateItemHook(handler:function, options:table|nil) -> boolean`
+
+### Notify / Callback
+
+- `notify(source:number, data:table|string) -> boolean`
+- `registerCallback(name:string, handler:function) -> boolean`
+
+### Vehicle
+
+- `setFuel(vehicle:number, fuel:number) -> boolean|nil`
+- `giveVehicleKeys(source:number, plate:string) -> boolean|nil`
+
+### Advanced Vehicle Ownership APIs
+
+- `createOwnedVehicle(request:table) -> table|nil`
+- `getOwnedVehicle(lookup:table) -> table|nil`
+- `spawnOwnedVehicle(request:table) -> any|nil`
+
+## Client API (`MetaBridgeClient`)
+
+### Core / Player
+
+- `getFramework() -> string|nil`
+- `isReady() -> boolean`
+- `getPlayerData() -> table|nil`
+- `getIdentifier() -> string|nil`
+- `getJob() -> table|nil`
+- `onPlayerLoaded(handler:function) -> boolean`
+
+### Vehicle / Entity
+
+- `setFuel(vehicle:number, fuel:number) -> boolean|nil`
+- `giveVehicleKeys(plate:string) -> boolean|nil`
+- `spawnPed(model:string|number, coords:table, heading:number|nil, networked:boolean|nil) -> number|nil`
+- `spawnVehicle(model:string|number, coords:table, heading:number|nil, networked:boolean|nil) -> number|nil`
+- `setEntityAsNoLongerNeeded(entity:number) -> boolean`
+
+### Inventory / UI
+
+- `getItemLabel(itemName:string) -> string|nil`
+- `getItemImage(itemName:string) -> string|nil`
+- `getItemCount(itemName:string, meta:table|nil) -> number`
+- `hasItem(itemName:string, amount:number|nil, meta:table|nil) -> boolean`
+- `displayMetadata(metadataMap:table) -> nil`
+- `notify(data:table|string) -> boolean`
+- `progressBar(data:table) -> boolean|nil`
+- `registerContext(data:table) -> boolean`
+- `showContext(contextId:string) -> boolean`
+- `inputDialog(title:string, rows:table) -> table|nil`
+
+### Callbacks
+
+- `requestCallback(name:string, cb:function, ...) -> any`
+- `requestCallbackAwait(name:string, ...) -> any`
+
+### Target / Text UI
+
+- `addTargetModel(models:any, options:table) -> boolean`
+- `addTargetBoxZone(data:table) -> any`
+- `addTargetSphereZone(data:table) -> any`
+- `removeTargetZone(zoneId:string|number) -> boolean`
+- `showTextUI(text:string) -> boolean`
+- `hideTextUI() -> boolean`
+- `isTextUIOpen() -> boolean`
+
+### Advanced Dispatch API
+
+- `sendDispatch(data:table) -> any|nil`
+
+## Usage Examples
+
+### Server (exports)
+
+```lua
+local Bridge = exports['metabridge']
+
+RegisterCommand('paybonus', function(source)
+  if Bridge:hasItem(source, 'id_card', 1) then
+    Bridge:notify(source, {
+      type = 'success',
+      description = 'Bonus paid.'
+    })
+  else
+    Bridge:notify(source, {
+      type = 'error',
+      description = 'You need an ID card.'
+    })
+  end
+end)
+```
+
+### Client (globals via `@metabridge/init.lua`)
+
+```lua
+CreateThread(function()
+  MetaBridgeClient.onPlayerLoaded(function(payload)
+    MetaBridgeClient.showTextUI(('Welcome %s'):format(payload.framework or 'player'))
+    Wait(2500)
+    MetaBridgeClient.hideTextUI()
+  end)
+end)
+```
+
+### Advanced server owned vehicle flow
+
+```lua
+local Bridge = exports['metabridge']
+
+local created = Bridge:createOwnedVehicle({
+  source = source,
+  model = 'sultan',
+  plate = 'META123'
+})
+
+local owned = Bridge:getOwnedVehicle({ plate = 'META123' })
+if owned then
+  Bridge:spawnOwnedVehicle({
+    source = source,
+    plate = 'META123',
+    coords = vec4(215.0, -810.0, 30.0, 70.0)
+  })
+end
+```
+
+### Advanced client dispatch flow
+
+```lua
+local Bridge = exports['metabridge']
+
+Bridge:sendDispatch({
+  code = '10-31',
+  message = 'Store robbery in progress',
+  description = 'Silent alarm triggered',
+  jobs = { 'police' },
+  coords = GetEntityCoords(PlayerPedId()),
+  blip = {
+    sprite = 161,
+    color = 1,
+    scale = 1.0,
+    flash = true,
+    text = 'Robbery Alert',
+    duration = 120000
+  }
+})
+```
+
+## Notes
+
+- Server exports are auto-published from the `MetaBridge` table.
+- Client exports are wrapped from `MetaBridgeClient` after dispatch is loaded, so `sendDispatch` is export-available.
+- If using globals via `@metabridge/init.lua`, expect debug mode to be forced on.
