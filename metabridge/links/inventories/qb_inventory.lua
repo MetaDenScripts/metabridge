@@ -25,6 +25,19 @@ function qbInventory.getItemData(source, itemName, meta)
     return data
 end
 
+function qbInventory.getItemDefinition(source, itemName)
+    local data = qbInventory.getItemData(source, itemName)
+    if type(data) ~= 'table' then
+        return nil
+    end
+
+    return {
+        name = itemName,
+        label = data.label or itemName,
+        weight = data.weight or 0,
+    }
+end
+
 function qbInventory.getItemCount(source, itemName, meta)
     local data = qbInventory.getItemData(source, itemName, meta)
     return data and (data.amount or data.count or 0) or 0
@@ -36,4 +49,8 @@ end
 
 function qbInventory.removeItem(source, itemName, amount, meta)
     return callExport('qb-inventory', 'RemoveItem', source, itemName, amount or 1) == true
+end
+
+function qbInventory.removeItemExact(source, itemName, amount, meta, slot)
+    return qbInventory.removeItem(source, itemName, amount, meta)
 end

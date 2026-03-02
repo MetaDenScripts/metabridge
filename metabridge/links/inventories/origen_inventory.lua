@@ -22,6 +22,15 @@ function InventoryAdapters.origen_inventory.getItemData(source, itemName, meta)
     return callExport('origen_inventory', 'GetItem', source, itemName) or {}
 end
 
+function InventoryAdapters.origen_inventory.getItemDefinition(source, itemName)
+    local data = InventoryAdapters.origen_inventory.getItemData(source, itemName)
+    return {
+        name = itemName,
+        label = data.label or itemName,
+        weight = data.weight or 0,
+    }
+end
+
 function InventoryAdapters.origen_inventory.getItemCount(source, itemName, meta)
     local data = InventoryAdapters.origen_inventory.getItemData(source, itemName, meta)
     return data.count or data.amount or 0
@@ -35,4 +44,8 @@ end
 function InventoryAdapters.origen_inventory.removeItem(source, itemName, amount, meta)
     local success = callExport('origen_inventory', 'RemoveItem', source, itemName, amount or 1)
     return success == true
+end
+
+function InventoryAdapters.origen_inventory.removeItemExact(source, itemName, amount, meta, slot)
+    return InventoryAdapters.origen_inventory.removeItem(source, itemName, amount, meta)
 end

@@ -51,3 +51,15 @@ end
 function BridgeAdapters.standalone.giveVehicleKeys(source, plate)
     return BridgeShared.giveVehicleKeys(source, plate)
 end
+
+function BridgeAdapters.standalone.createOwnedVehicle(request)
+    return nil
+end
+
+function BridgeAdapters.standalone.getOwnedVehicle(lookup)
+    return nil
+end
+
+function BridgeAdapters.standalone.spawnOwnedVehicle(request)
+    return nil
+end

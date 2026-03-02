@@ -8,7 +8,7 @@ if GetResourceState(resource) == 'missing' then
 end
 
 BridgeConfig = BridgeConfig or {}
-BridgeConfig.debug = true
+BridgeConfig.debug = false
 
 local function loadFile(path)
     local chunk = LoadResourceFile(resource, path)

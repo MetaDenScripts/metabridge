@@ -3,6 +3,8 @@ MetaBridgeClient = MetaBridgeClient or {}
 local QBCore = QBCore
 local callbackRequestId = 0
 local pendingCallbacks = {}
+local playerLoadedHandlers = {}
+local hasEmittedPlayerLoaded = false
 
 local function getQBCore()
     if QBCore then
@@ -40,6 +42,133 @@ end
 
 function MetaBridgeClient.isReady()
     return MetaBridgeClient.getFramework() ~= nil
+end
+
+local function resolveJobData(data)
+    if type(data) ~= 'table' then
+        return nil
+    end
+
+    if data.job ~= nil then
+        return data.job
+    end
+
+    if data.PlayerData and type(data.PlayerData) == 'table' and data.PlayerData.job ~= nil then
+        return data.PlayerData.job
+    end
+
+    if data.playerData and type(data.playerData) == 'table' and data.playerData.job ~= nil then
+        return data.playerData.job
+    end
+
+    if data.metadata and type(data.metadata) == 'table' and data.metadata.job ~= nil then
+        return data.metadata.job
+    end
+
+    if data.groups and type(data.groups) == 'table' then
+        if data.groups.job ~= nil then
+            return data.groups.job
+        end
+
+        for groupName, groupData in pairs(data.groups) do
+            if type(groupData) == 'table' and (groupData.name ~= nil or groupData.grade ~= nil or groupData.level ~= nil) then
+                if type(groupName) == 'string' and groupData.name == nil then
+                    groupData.name = groupName
+                end
+                return groupData
+            end
+        end
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.getPlayerData()
+    local framework = MetaBridgeClient.getFramework()
+
+    if framework == 'qbcore' then
+        local core = getQBCore()
+        if core and core.Functions and core.Functions.GetPlayerData then
+            local playerData = core.Functions.GetPlayerData()
+            if type(playerData) == 'table' then
+                return playerData
+            end
+        end
+    elseif framework == 'qbox' then
+        if exports and exports.qbx_core and exports.qbx_core.GetPlayerData then
+            local ok, playerData = pcall(function()
+                return exports.qbx_core:GetPlayerData()
+            end)
+            if ok and type(playerData) == 'table' then
+                return playerData
+            end
+        end
+
+        if type(QBX) == 'table' and type(QBX.PlayerData) == 'table' then
+            return QBX.PlayerData
+        end
+    elseif framework == 'esx' then
+        if type(ESX) == 'table' and type(ESX.PlayerData) == 'table' then
+            return ESX.PlayerData
+        end
+    end
+
+    local serverData = MetaBridgeClient.requestCallbackAwait('MetaBridge:getPlayerData')
+    if type(serverData) == 'table' then
+        return serverData
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.getIdentifier()
+    local playerData = MetaBridgeClient.getPlayerData()
+    if type(playerData) == 'table' then
+        if type(playerData.citizenid) == 'string' and playerData.citizenid ~= '' then
+            return playerData.citizenid
+        end
+
+        if type(playerData.identifier) == 'string' and playerData.identifier ~= '' then
+            return playerData.identifier
+        end
+    end
+
+    return MetaBridgeClient.requestCallbackAwait('MetaBridge:getIdentifier')
+end
+
+function MetaBridgeClient.getJob()
+    local playerData = MetaBridgeClient.getPlayerData()
+    local job = resolveJobData(playerData)
+    if job ~= nil then
+        return job
+    end
+
+    return MetaBridgeClient.requestCallbackAwait('MetaBridge:getJob')
+end
+
+local function emitPlayerLoaded(payload)
+    hasEmittedPlayerLoaded = true
+    for _, handler in ipairs(playerLoadedHandlers) do
+        handler(payload)
+    end
+end
+
+function MetaBridgeClient.onPlayerLoaded(handler)
+    if type(handler) ~= 'function' then
+        return false
+    end
+
+    playerLoadedHandlers[#playerLoadedHandlers + 1] = handler
+
+    if hasEmittedPlayerLoaded then
+        handler({
+            source = GetPlayerServerId(PlayerId()),
+            playerData = MetaBridgeClient.getPlayerData(),
+            framework = MetaBridgeClient.getFramework()
+        })
+    end
+
+    return true
 end
 
 function MetaBridgeClient.setFuel(vehicle, fuel)
@@ -143,14 +272,50 @@ function MetaBridgeClient.setEntityAsNoLongerNeeded(entity)
 end
 
 function MetaBridgeClient.getItemLabel(itemName)
-    if exports and exports.ox_inventory and exports.ox_inventory.Items then
-        local oxItem = exports.ox_inventory:Items(itemName)
-        if oxItem and oxItem.label then
-            return oxItem.label
-        end
+    local definition = MetaBridgeClient.requestCallbackAwait('MetaBridge:getItemDefinition', itemName)
+    if type(definition) == 'table' and type(definition.label) == 'string' and definition.label ~= '' then
+        return definition.label
     end
 
     return itemName
+end
+
+function MetaBridgeClient.getItemCount(itemName, meta)
+    -- Fast path: ox_inventory exposes a client-side GetItemCount that reads from
+    -- its locally cached PlayerData.inventory table, avoiding a server round-trip.
+    if exports and exports.ox_inventory then
+        local ok, count = pcall(function()
+            return exports.ox_inventory:GetItemCount(itemName, meta)
+        end)
+        if ok and count ~= nil then
+            return tonumber(count) or 0
+        end
+    end
+
+    local count = MetaBridgeClient.requestCallbackAwait('MetaBridge:getItemCount', itemName, meta)
+    return tonumber(count) or 0
+end
+
+function MetaBridgeClient.hasItem(itemName, amount, meta)
+    local requiredAmount = tonumber(amount) or 1
+    if requiredAmount < 1 then
+        requiredAmount = 1
+    end
+
+    return MetaBridgeClient.getItemCount(itemName, meta) >= requiredAmount
+end
+
+function MetaBridgeClient.displayMetadata(metadataMap)
+    if BridgeConfig and BridgeConfig.inventory and BridgeConfig.inventory.displayMetadata then
+        return BridgeConfig.inventory.displayMetadata(metadataMap)
+    end
+
+    if exports and exports.ox_inventory and exports.ox_inventory.displayMetadata then
+        exports.ox_inventory:displayMetadata(metadataMap)
+        return true
+    end
+
+    return false
 end
 
 function MetaBridgeClient.getItemImage(itemName)
@@ -206,6 +371,15 @@ function MetaBridgeClient.progressBar(data)
 
     if lib and lib.progressBar then
         return lib.progressBar(data)
+    end
+
+    -- lib is not initialised in this resource's Lua state (ox_lib init.lua was not
+    -- loaded here), so call ox_lib directly via its export instead.
+    local ok, result = pcall(function()
+        return exports['ox_lib']:progressBar(data)
+    end)
+    if ok and result ~= nil then
+        return result
     end
 
     return false
@@ -370,9 +544,8 @@ function MetaBridgeClient.addTargetBoxZone(data)
         return BridgeConfig.target.addBoxZone(data)
     end
 
-    local addOxBoxZone = targetExport('ox_target', 'addBoxZone')
-    if addOxBoxZone then
-        return addOxBoxZone(data)
+    if exports and exports.ox_target and exports.ox_target.addBoxZone then
+        return exports.ox_target:addBoxZone(data)
     end
 
     local addQbBoxZone = targetExport('qb-target', 'AddBoxZone') or targetExport('qtarget', 'AddBoxZone')
@@ -403,9 +576,8 @@ function MetaBridgeClient.addTargetSphereZone(data)
         return BridgeConfig.target.addSphereZone(data)
     end
 
-    local addOxSphereZone = targetExport('ox_target', 'addSphereZone')
-    if addOxSphereZone then
-        return addOxSphereZone(data)
+    if exports and exports.ox_target and exports.ox_target.addSphereZone then
+        return exports.ox_target:addSphereZone(data)
     end
 
     local addQbCircleZone = targetExport('qb-target', 'AddCircleZone') or targetExport('qtarget', 'AddCircleZone')
@@ -434,9 +606,8 @@ function MetaBridgeClient.removeTargetZone(zoneId)
         return BridgeConfig.target.removeZone(zoneId)
     end
 
-    local removeOxZone = targetExport('ox_target', 'removeZone')
-    if removeOxZone then
-        removeOxZone(zoneId)
+    if exports and exports.ox_target and exports.ox_target.removeZone then
+        exports.ox_target:removeZone(zoneId)
         return true
     end
 
@@ -509,3 +680,145 @@ function MetaBridgeClient.addTargetModel(models, options)
 
     return false
 end
+
+function MetaBridgeClient.removeTargetModel(models)
+    if BridgeConfig and BridgeConfig.target and BridgeConfig.target.removeModel then
+        return BridgeConfig.target.removeModel(models)
+    end
+
+    if exports and exports.ox_target and exports.ox_target.removeModel then
+        exports.ox_target:removeModel(models)
+        return true
+    end
+
+    if exports and exports.qtarget and exports.qtarget.RemoveTargetModel then
+        exports.qtarget:RemoveTargetModel(models)
+        return true
+    end
+
+    if exports and exports['qb-target'] and exports['qb-target'].RemoveTargetModel then
+        exports['qb-target']:RemoveTargetModel(models)
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.addTargetLocalEntity(entity, options)
+    if BridgeConfig and BridgeConfig.target and BridgeConfig.target.addLocalEntity then
+        return BridgeConfig.target.addLocalEntity(entity, options)
+    end
+
+    if exports and exports.ox_target and exports.ox_target.addLocalEntity then
+        exports.ox_target:addLocalEntity(entity, options)
+        return true
+    end
+
+    if exports and exports.qtarget and exports.qtarget.AddTargetEntity then
+        exports.qtarget:AddTargetEntity(entity, { options = options, distance = 2.5 })
+        return true
+    end
+
+    if exports and exports['qb-target'] and exports['qb-target'].AddTargetEntity then
+        exports['qb-target']:AddTargetEntity(entity, { options = options, distance = 2.5 })
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.removeTargetLocalEntity(entity)
+    if BridgeConfig and BridgeConfig.target and BridgeConfig.target.removeLocalEntity then
+        return BridgeConfig.target.removeLocalEntity(entity)
+    end
+
+    if exports and exports.ox_target and exports.ox_target.removeLocalEntity then
+        exports.ox_target:removeLocalEntity(entity)
+        return true
+    end
+
+    if exports and exports.qtarget and exports.qtarget.RemoveTargetEntity then
+        exports.qtarget:RemoveTargetEntity(entity)
+        return true
+    end
+
+    if exports and exports['qb-target'] and exports['qb-target'].RemoveTargetEntity then
+        exports['qb-target']:RemoveTargetEntity(entity)
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.alertDialog(data)
+    if BridgeConfig and BridgeConfig.alertDialog and BridgeConfig.alertDialog.client then
+        return BridgeConfig.alertDialog.client(data)
+    end
+
+    if lib and lib.alertDialog then
+        return lib.alertDialog(data)
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.addZoneSphere(data)
+    if BridgeConfig and BridgeConfig.zones and BridgeConfig.zones.sphere then
+        return BridgeConfig.zones.sphere(data)
+    end
+
+    if lib and lib.zones and lib.zones.sphere then
+        return lib.zones.sphere(data)
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.addPoint(data)
+    if BridgeConfig and BridgeConfig.points and BridgeConfig.points.new then
+        return BridgeConfig.points.new(data)
+    end
+
+    if lib and lib.points and lib.points.new then
+        return lib.points.new(data)
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.requestModel(model, timeoutMs)
+    return requestModel(model, timeoutMs)
+end
+
+RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function(...)
+    emitPlayerLoaded({
+        source = GetPlayerServerId(PlayerId()),
+        playerData = MetaBridgeClient.getPlayerData(),
+        framework = MetaBridgeClient.getFramework(),
+        event = 'QBCore:Client:OnPlayerLoaded',
+        args = { ... }
+    })
+end)
+
+RegisterNetEvent('esx:playerLoaded', function(...)
+    emitPlayerLoaded({
+        source = GetPlayerServerId(PlayerId()),
+        playerData = MetaBridgeClient.getPlayerData(),
+        framework = MetaBridgeClient.getFramework(),
+        event = 'esx:playerLoaded',
+        args = { ... }
+    })
+end)
+
+CreateThread(function()
+    Wait(500)
+    local playerData = MetaBridgeClient.getPlayerData()
+    if type(playerData) == 'table' and next(playerData) ~= nil then
+        emitPlayerLoaded({
+            source = GetPlayerServerId(PlayerId()),
+            playerData = playerData,
+            framework = MetaBridgeClient.getFramework(),
+            event = 'bootstrap'
+        })
+    end
+end)

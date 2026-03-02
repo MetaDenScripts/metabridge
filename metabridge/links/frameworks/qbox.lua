@@ -176,3 +176,184 @@ end
 function BridgeAdapters.qbox.giveVehicleKeys(source, plate)
     return BridgeShared.giveVehicleKeys(source, plate)
 end
+
+function BridgeAdapters.qbox.createOwnedVehicle(request)
+    if type(request) ~= 'table' then
+        return nil
+    end
+
+    if not exports or not exports.qbx_vehicles then
+        return nil
+    end
+
+    local ownerIdentifier = request.ownerIdentifier or request.citizenid
+    if type(ownerIdentifier) ~= 'string' or ownerIdentifier == '' then
+        return nil
+    end
+
+    local model = request.model
+    if type(model) ~= 'string' or model == '' then
+        return nil
+    end
+
+    local createRequest = {
+        model = model,
+        citizenid = ownerIdentifier,
+        garage = request.garage,
+        props = request.props
+    }
+
+    local vehicleId = exports.qbx_vehicles:CreatePlayerVehicle(createRequest)
+    if not vehicleId then
+        return nil
+    end
+
+    local ownedVehicle = exports.qbx_vehicles:GetPlayerVehicle(vehicleId)
+    if not ownedVehicle then
+        return {
+            id = vehicleId,
+            model = model,
+            ownerIdentifier = ownerIdentifier,
+        }
+    end
+
+    return {
+        id = vehicleId,
+        plate = ownedVehicle.plate or (ownedVehicle.props and ownedVehicle.props.plate),
+        model = ownedVehicle.modelName or ownedVehicle.vehicle or model,
+        props = ownedVehicle.props,
+        ownerIdentifier = ownedVehicle.citizenid or ownerIdentifier,
+    }
+end
+
+function BridgeAdapters.qbox.getOwnedVehicle(lookup)
+    if type(lookup) ~= 'table' or not exports or not exports.qbx_vehicles then
+        return nil
+    end
+
+    local vehicleId = lookup.id or lookup.vehicleId
+    if vehicleId == nil then
+        return nil
+    end
+
+    local ownedVehicle = exports.qbx_vehicles:GetPlayerVehicle(vehicleId)
+    if not ownedVehicle then
+        return nil
+    end
+
+    return {
+        id = ownedVehicle.id or vehicleId,
+        plate = ownedVehicle.plate or (ownedVehicle.props and ownedVehicle.props.plate),
+        model = ownedVehicle.modelName or ownedVehicle.vehicle,
+        props = ownedVehicle.props,
+        ownerIdentifier = ownedVehicle.citizenid,
+    }
+end
+
+function BridgeAdapters.qbox.spawnOwnedVehicle(request)
+    if type(request) ~= 'table' then
+        return nil
+    end
+
+    local model  = request.model
+    local coords = request.coords
+    if type(model) ~= 'string' or model == '' or type(coords) ~= 'table' then
+        return nil
+    end
+
+    local heading   = tonumber(request.heading) or tonumber(coords.w) or 0.0
+    local props     = request.props
+    local modelHash = joaat(model)
+
+    -- qbx.spawnVehicle is a script-local inside qbx_core and is NOT accessible
+    -- from other resources. Use the cross-resource export instead.
+    local vehicleType
+    local ok, vehData = pcall(function()
+        return exports.qbx_core:GetVehiclesByHash(modelHash)
+    end)
+    if ok and type(vehData) == 'table' and type(vehData.type) == 'string' then
+        vehicleType = vehData.type
+    else
+        -- Fallback: spawn a temp vehicle off-map to read its type then discard it.
+        local tempVeh = CreateVehicle(modelHash, 0, 0, -200, 0, true, true)
+        local deadline = GetGameTimer() + 3000
+        while not DoesEntityExist(tempVeh) and GetGameTimer() < deadline do Wait(0) end
+        if DoesEntityExist(tempVeh) then
+            vehicleType = GetVehicleType(tempVeh)
+            DeleteEntity(tempVeh)
+        end
+    end
+
+    if not vehicleType then
+        BridgeShared.debug('adapter.qbox', 'spawnOwnedVehicle: could not determine vehicleType', { model = model })
+        return nil
+    end
+
+    -- Spawn at the stored prop Z; the ground surface is at this level.
+    local spawnZ = (tonumber(coords.z) or 0.0)
+
+    local veh, netId
+    for attempt = 1, 3 do
+        veh = CreateVehicleServerSetter(modelHash, vehicleType, coords.x, coords.y, spawnZ, heading)
+
+        local deadline = GetGameTimer() + 5000
+        while not DoesEntityExist(veh) and GetGameTimer() < deadline do Wait(0) end
+
+        if not DoesEntityExist(veh) then
+            BridgeShared.debug('adapter.qbox', 'spawnOwnedVehicle: entity missing after spawn', { attempt = attempt })
+            veh = nil
+        else
+            -- Wait for the game to assign an initial plate.
+            deadline = GetGameTimer() + 3000
+            while GetVehicleNumberPlateText(veh) == '' and GetGameTimer() < deadline do Wait(0) end
+
+            netId = NetworkGetNetworkIdFromEntity(veh)
+
+            -- Apply props (including the correct plate) via the owning client.
+            if props and type(props) == 'table' and props.plate then
+                local owner = NetworkGetEntityOwner(veh)
+                if owner and owner >= 0 then
+                    TriggerClientEvent('qbx_core:client:setVehicleProperties', owner, netId, props)
+
+                    -- Wait up to 2 s for the plate to be confirmed server-side.
+                    local expected = props.plate:match('^%s*(.-)%s*$')
+                    local plateOk  = false
+                    deadline = GetGameTimer() + 2000
+                    while GetGameTimer() < deadline do
+                        Wait(100)
+                        local current = GetVehicleNumberPlateText(veh):match('^%s*(.-)%s*$')
+                        if current == expected then
+                            plateOk = true
+                            break
+                        end
+                    end
+
+                    if not plateOk then
+                        BridgeShared.debug('adapter.qbox', 'spawnOwnedVehicle: plate mismatch, retrying', { attempt = attempt })
+                        DeleteEntity(veh)
+                        veh = nil
+                    end
+                end
+            end
+        end
+
+        if veh and DoesEntityExist(veh) then
+            break
+        end
+    end
+
+    if not veh or not DoesEntityExist(veh) then
+        BridgeShared.debug('adapter.qbox', 'spawnOwnedVehicle: failed after 3 attempts', { model = model })
+        return nil
+    end
+
+    -- Prevent the server culling a vehicle with no nearby players.
+    SetEntityOrphanMode(veh, 2)
+    pcall(function() exports.qbx_core:EnablePersistence(veh) end)
+
+    return {
+        netId  = netId,
+        entity = veh,
+        plate  = request.plate or (props and props.plate),
+    }
+end
