@@ -5,6 +5,7 @@ BridgeAdapters.esx = {
 }
 
 local ESX = nil
+local cachedJobDefinitions = nil
 
 local function getESX()
     if not ESX then
@@ -79,6 +80,52 @@ function BridgeAdapters.esx.getJob(source)
     return player and player.job or nil
 end
 
+function BridgeAdapters.esx.getJobDefinitions()
+    if cachedJobDefinitions ~= nil then
+        return cachedJobDefinitions or nil
+    end
+
+    if type(MySQL) ~= 'table' or type(MySQL.query) ~= 'table' or type(MySQL.query.await) ~= 'function' then
+        cachedJobDefinitions = false
+        return nil
+    end
+
+    local jobs = MySQL.query.await('SELECT name, label FROM jobs', {}) or {}
+    local grades = MySQL.query.await('SELECT job_name, grade, label FROM job_grades ORDER BY job_name, grade', {}) or {}
+    local mapped = {}
+
+    for _, job in ipairs(jobs) do
+        if type(job.name) == 'string' and job.name ~= '' then
+            mapped[job.name] = {
+                label = job.label or job.name,
+                grades = {}
+            }
+        end
+    end
+
+    for _, grade in ipairs(grades) do
+        local jobName = grade.job_name
+        if type(jobName) == 'string' and jobName ~= '' then
+            mapped[jobName] = mapped[jobName] or {
+                label = jobName,
+                grades = {}
+            }
+
+            local numericLevel = tonumber(grade.grade)
+            if numericLevel ~= nil then
+                mapped[jobName].grades[#mapped[jobName].grades + 1] = {
+                    level = numericLevel,
+                    name = grade.label,
+                    isBoss = false,
+                }
+            end
+        end
+    end
+
+    cachedJobDefinitions = mapped
+    return mapped
+end
+
 function BridgeAdapters.esx.getMoney(source, moneyType)
     local player = BridgeAdapters.esx.getPlayer(source)
     if not player then
@@ -100,6 +147,63 @@ function BridgeAdapters.esx.getMoney(source, moneyType)
     end
 
     return nil
+end
+
+function BridgeAdapters.esx.addMoney(source, moneyType, amount, reason)
+    local player = BridgeAdapters.esx.getPlayer(source)
+    if not player then
+        return false
+    end
+
+    amount = tonumber(amount) or 0
+    moneyType = moneyType or 'money'
+    if moneyType == 'cash' then
+        moneyType = 'money'
+    end
+
+    if moneyType ~= 'money' and player.addAccountMoney then
+        player.addAccountMoney(moneyType, amount, reason)
+        return true
+    end
+
+    if player.addMoney then
+        player.addMoney(amount, reason)
+        return true
+    end
+
+    return false
+end
+
+function BridgeAdapters.esx.removeMoney(source, moneyType, amount, reason)
+    local player = BridgeAdapters.esx.getPlayer(source)
+    if not player then
+        return false
+    end
+
+    amount = tonumber(amount) or 0
+    moneyType = moneyType or 'money'
+    if moneyType == 'cash' then
+        moneyType = 'money'
+    end
+
+    if moneyType ~= 'money' and player.removeAccountMoney then
+        local account = player.getAccount and player.getAccount(moneyType) or nil
+        local currentMoney = account and tonumber(account.money) or 0
+        if currentMoney < amount then
+            return false
+        end
+
+        player.removeAccountMoney(moneyType, amount, reason)
+        return true
+    end
+
+    local currentMoney = player.getMoney and tonumber(player.getMoney()) or 0
+    if currentMoney < amount or not player.removeMoney then
+        return false
+    end
+
+    player.removeMoney(amount, reason)
+    return true
 end
 
 function BridgeAdapters.esx.hasItem(source, itemName, amount)

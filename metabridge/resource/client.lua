@@ -4,7 +4,19 @@ local QBCore = QBCore
 local callbackRequestId = 0
 local pendingCallbacks = {}
 local playerLoadedHandlers = {}
+local playerUnloadedHandlers = {}
+local playerDataChangedHandlers = {}
+local jobChangedHandlers = {}
+local gangChangedHandlers = {}
+local metadataChangedHandlers = {}
 local hasEmittedPlayerLoaded = false
+local lastKnownPlayerData = nil
+
+local function emitHandlers(handlers, payload)
+    for _, handler in ipairs(handlers) do
+        handler(payload)
+    end
+end
 
 local function getQBCore()
     if QBCore then
@@ -146,11 +158,68 @@ function MetaBridgeClient.getJob()
     return MetaBridgeClient.requestCallbackAwait('MetaBridge:getJob')
 end
 
+function MetaBridgeClient.getGang()
+    local playerData = MetaBridgeClient.getPlayerData()
+    if BridgeShared and BridgeShared.resolveGangData then
+        local gang = BridgeShared.resolveGangData(playerData)
+        if gang ~= nil then
+            return gang
+        end
+    end
+
+    return nil
+end
+
+function MetaBridgeClient.getMetadata(key)
+    local playerData = MetaBridgeClient.getPlayerData()
+    local metadata = type(playerData) == 'table' and playerData.metadata or nil
+    if type(metadata) ~= 'table' then
+        return nil
+    end
+
+    if type(key) ~= 'string' or key == '' then
+        return metadata
+    end
+
+    local current = metadata
+    for segment in key:gmatch('[^%.]+') do
+        if type(current) ~= 'table' then
+            return nil
+        end
+
+        current = current[segment]
+    end
+
+    return current
+end
+
 local function emitPlayerLoaded(payload)
     hasEmittedPlayerLoaded = true
-    for _, handler in ipairs(playerLoadedHandlers) do
-        handler(payload)
-    end
+    lastKnownPlayerData = payload and payload.playerData or MetaBridgeClient.getPlayerData()
+    emitHandlers(playerLoadedHandlers, payload)
+end
+
+local function emitPlayerUnloaded(payload)
+    hasEmittedPlayerLoaded = false
+    lastKnownPlayerData = nil
+    emitHandlers(playerUnloadedHandlers, payload)
+end
+
+local function emitPlayerDataChanged(payload)
+    lastKnownPlayerData = payload and payload.playerData or lastKnownPlayerData
+    emitHandlers(playerDataChangedHandlers, payload)
+end
+
+local function emitJobChanged(payload)
+    emitHandlers(jobChangedHandlers, payload)
+end
+
+local function emitGangChanged(payload)
+    emitHandlers(gangChangedHandlers, payload)
+end
+
+local function emitMetadataChanged(payload)
+    emitHandlers(metadataChangedHandlers, payload)
 end
 
 function MetaBridgeClient.onPlayerLoaded(handler)
@@ -168,6 +237,51 @@ function MetaBridgeClient.onPlayerLoaded(handler)
         })
     end
 
+    return true
+end
+
+function MetaBridgeClient.onPlayerUnloaded(handler)
+    if type(handler) ~= 'function' then
+        return false
+    end
+
+    playerUnloadedHandlers[#playerUnloadedHandlers + 1] = handler
+    return true
+end
+
+function MetaBridgeClient.onPlayerDataChanged(handler)
+    if type(handler) ~= 'function' then
+        return false
+    end
+
+    playerDataChangedHandlers[#playerDataChangedHandlers + 1] = handler
+    return true
+end
+
+function MetaBridgeClient.onJobChanged(handler)
+    if type(handler) ~= 'function' then
+        return false
+    end
+
+    jobChangedHandlers[#jobChangedHandlers + 1] = handler
+    return true
+end
+
+function MetaBridgeClient.onGangChanged(handler)
+    if type(handler) ~= 'function' then
+        return false
+    end
+
+    gangChangedHandlers[#gangChangedHandlers + 1] = handler
+    return true
+end
+
+function MetaBridgeClient.onMetadataChanged(handler)
+    if type(handler) ~= 'function' then
+        return false
+    end
+
+    metadataChangedHandlers[#metadataChangedHandlers + 1] = handler
     return true
 end
 
@@ -800,12 +914,90 @@ RegisterNetEvent('QBCore:Client:OnPlayerLoaded', function(...)
     })
 end)
 
+RegisterNetEvent('QBCore:Client:OnPlayerUnload', function(...)
+    emitPlayerUnloaded({
+        source = GetPlayerServerId(PlayerId()),
+        framework = MetaBridgeClient.getFramework(),
+        event = 'QBCore:Client:OnPlayerUnload',
+        args = { ... }
+    })
+end)
+
+RegisterNetEvent('QBCore:Player:SetPlayerData', function(playerData, ...)
+    local resolvedPlayerData = type(playerData) == 'table' and playerData or MetaBridgeClient.getPlayerData()
+    emitPlayerDataChanged({
+        source = GetPlayerServerId(PlayerId()),
+        playerData = resolvedPlayerData,
+        previousPlayerData = lastKnownPlayerData,
+        framework = MetaBridgeClient.getFramework(),
+        event = 'QBCore:Player:SetPlayerData',
+        args = { ... }
+    })
+end)
+
+RegisterNetEvent('QBCore:Client:OnJobUpdate', function(job, ...)
+    local playerData = MetaBridgeClient.getPlayerData()
+    local previousJob = resolveJobData(lastKnownPlayerData)
+    lastKnownPlayerData = playerData or lastKnownPlayerData
+
+    emitJobChanged({
+        source = GetPlayerServerId(PlayerId()),
+        job = job,
+        previousJob = previousJob,
+        playerData = playerData,
+        framework = MetaBridgeClient.getFramework(),
+        event = 'QBCore:Client:OnJobUpdate',
+        args = { ... }
+    })
+end)
+
+RegisterNetEvent('QBCore:Client:OnGangUpdate', function(gang, ...)
+    local playerData = MetaBridgeClient.getPlayerData()
+    local previousGang = BridgeShared and BridgeShared.resolveGangData and BridgeShared.resolveGangData(lastKnownPlayerData) or nil
+    lastKnownPlayerData = playerData or lastKnownPlayerData
+
+    emitGangChanged({
+        source = GetPlayerServerId(PlayerId()),
+        gang = gang,
+        previousGang = previousGang,
+        playerData = playerData,
+        framework = MetaBridgeClient.getFramework(),
+        event = 'QBCore:Client:OnGangUpdate',
+        args = { ... }
+    })
+end)
+
+RegisterNetEvent('qbx_core:client:onSetMetaData', function(key, oldValue, newValue, ...)
+    local playerData = MetaBridgeClient.getPlayerData()
+    lastKnownPlayerData = playerData or lastKnownPlayerData
+
+    emitMetadataChanged({
+        source = GetPlayerServerId(PlayerId()),
+        key = key,
+        oldValue = oldValue,
+        newValue = newValue,
+        playerData = playerData,
+        framework = MetaBridgeClient.getFramework(),
+        event = 'qbx_core:client:onSetMetaData',
+        args = { ... }
+    })
+end)
+
 RegisterNetEvent('esx:playerLoaded', function(...)
     emitPlayerLoaded({
         source = GetPlayerServerId(PlayerId()),
         playerData = MetaBridgeClient.getPlayerData(),
         framework = MetaBridgeClient.getFramework(),
         event = 'esx:playerLoaded',
+        args = { ... }
+    })
+end)
+
+RegisterNetEvent('esx:onPlayerLogout', function(...)
+    emitPlayerUnloaded({
+        source = GetPlayerServerId(PlayerId()),
+        framework = MetaBridgeClient.getFramework(),
+        event = 'esx:onPlayerLogout',
         args = { ... }
     })
 end)

@@ -1,3 +1,14 @@
+## [1.0.4] - 2026-03-03
+
+### Fixed
+- `MetaBridge:invokeCallback` server net event now **silently returns** when the requested callback is not registered in the current Lua state, instead of immediately firing a `MetaBridge:callbackResponse` error back to the client. This eliminates a race condition where the `metabridge` resource's own Lua state (which holds no downstream resource callbacks) would respond with `success = false` before the resource that actually owns the callback could respond with the real result. The previous behaviour caused every `requestCallbackAwait` call in resources that embed `metabridge` via `@metabridge/init.lua` (without `ox_lib` in their own `shared_scripts`) to silently receive `nil`.
+
+### Compatibility
+- Public exports, events, and method signatures remain unchanged.
+- Both resource mode and `@metabridge/init.lua` include mode remain supported.
+
+---
+
 ## [1.0.3] - 2026-02-20
 
 ### Added

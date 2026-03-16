@@ -28,6 +28,7 @@ loadFile('resource/shared.lua')
 
 if IsDuplicityVersion() then
     loadFile('resource/bridge.lua')
+    loadFile('resource/jobs.lua')
     loadFile('resource/inventory.lua')
     loadFile('links/dispatch/server.lua')
 

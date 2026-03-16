@@ -11,6 +11,40 @@ local function getExportFunction(method)
     return BridgeShared.getExportFunction('qbx_core', method, false)
 end
 
+local cachedJobDefinitions = nil
+
+local function loadJobDefinitions()
+    if cachedJobDefinitions ~= nil then
+        return cachedJobDefinitions or nil
+    end
+
+    local fileContents = LoadResourceFile('qbx_core', 'shared/jobs.lua')
+    if type(fileContents) ~= 'string' or fileContents == '' then
+        cachedJobDefinitions = false
+        return nil
+    end
+
+    local chunk, loadError = load(fileContents, '@qbx_core/shared/jobs.lua', 't', {})
+    if not chunk then
+        BridgeShared.debug('adapter.qbox', 'Failed to parse shared/jobs.lua', { error = tostring(loadError) })
+        cachedJobDefinitions = false
+        return nil
+    end
+
+    local success, jobs = pcall(chunk)
+    if not success or type(jobs) ~= 'table' then
+        BridgeShared.debug('adapter.qbox', 'Failed to evaluate shared/jobs.lua', {
+            success = success,
+            resultType = type(jobs)
+        })
+        cachedJobDefinitions = false
+        return nil
+    end
+
+    cachedJobDefinitions = jobs
+    return jobs
+end
+
 function BridgeAdapters.qbox.getPlayer(source)
     local getPlayer = getExportFunction('GetPlayer')
     if not getPlayer then
@@ -79,6 +113,44 @@ function BridgeAdapters.qbox.getJob(source)
     return job
 end
 
+function BridgeAdapters.qbox.getJobDefinitions()
+    return loadJobDefinitions()
+end
+
+function BridgeAdapters.qbox.getGang(source)
+    local player = BridgeAdapters.qbox.getPlayer(source)
+    local gang = BridgeShared.resolveGangData(player)
+    if gang ~= nil then
+        return gang
+    end
+
+    local playerData = BridgeAdapters.qbox.getPlayerData(source)
+    return BridgeShared.resolveGangData(playerData)
+end
+
+function BridgeAdapters.qbox.getMetadata(source, key)
+    local playerData = BridgeAdapters.qbox.getPlayerData(source)
+    local metadata = type(playerData) == 'table' and playerData.metadata or nil
+    if type(metadata) ~= 'table' then
+        return nil
+    end
+
+    if type(key) ~= 'string' or key == '' then
+        return metadata
+    end
+
+    local current = metadata
+    for segment in key:gmatch('[^%.]+') do
+        if type(current) ~= 'table' then
+            return nil
+        end
+
+        current = current[segment]
+    end
+
+    return current
+end
+
 function BridgeAdapters.qbox.getMoney(source, moneyType)
     moneyType = moneyType or 'cash'
     if moneyType == 'money' then
@@ -87,7 +159,15 @@ function BridgeAdapters.qbox.getMoney(source, moneyType)
 
     local getMoney = getExportFunction('GetMoney')
     if getMoney then
-        return getMoney(source, moneyType)
+        local amount = getMoney(source, moneyType)
+        if amount ~= false then
+            return amount
+        end
+    end
+
+    local player = BridgeAdapters.qbox.getPlayer(source)
+    if player and player.PlayerData and player.PlayerData.money then
+        return player.PlayerData.money[moneyType]
     end
 
     local playerData = BridgeAdapters.qbox.getPlayerData(source)
@@ -96,6 +176,81 @@ function BridgeAdapters.qbox.getMoney(source, moneyType)
     end
 
     return playerData.money[moneyType]
+end
+
+function BridgeAdapters.qbox.setPlayerMetadata(source, key, value)
+    local setMetadata = getExportFunction('SetMetadata')
+    if setMetadata then
+        setMetadata(source, key, value)
+        return true
+    end
+
+    local player = BridgeAdapters.qbox.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.SetMetaData then
+        return false
+    end
+
+    player.Functions.SetMetaData(key, value)
+    return true
+end
+
+function BridgeAdapters.qbox.addMoney(source, moneyType, amount, reason)
+    moneyType = moneyType or 'cash'
+    if moneyType == 'money' then
+        moneyType = 'cash'
+    end
+
+    amount = tonumber(amount) or 0
+    if amount < 0 then
+        return false
+    end
+
+    local addMoney = getExportFunction('AddMoney')
+    if addMoney then
+        local success = addMoney(source, moneyType, amount, reason)
+        if success == true then
+            return true
+        end
+    end
+
+    local player = BridgeAdapters.qbox.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.AddMoney then
+        return false
+    end
+
+    return player.Functions.AddMoney(moneyType, amount, reason) == true
+end
+
+function BridgeAdapters.qbox.removeMoney(source, moneyType, amount, reason)
+    moneyType = moneyType or 'cash'
+    if moneyType == 'money' then
+        moneyType = 'cash'
+    end
+
+    amount = tonumber(amount) or 0
+    if amount < 0 then
+        return false
+    end
+
+    local currentMoney = tonumber(BridgeAdapters.qbox.getMoney(source, moneyType)) or 0
+    if currentMoney < amount then
+        return false
+    end
+
+    local removeMoney = getExportFunction('RemoveMoney')
+    if removeMoney then
+        local success = removeMoney(source, moneyType, amount, reason)
+        if success == true then
+            return true
+        end
+    end
+
+    local player = BridgeAdapters.qbox.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.RemoveMoney then
+        return false
+    end
+
+    return player.Functions.RemoveMoney(moneyType, amount, reason) == true
 end
 
 function BridgeAdapters.qbox.hasItem(source, itemName, amount)

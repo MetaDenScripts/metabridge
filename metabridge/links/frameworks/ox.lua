@@ -94,6 +94,41 @@ function BridgeAdapters.ox.getMoney(source, moneyType)
     return nil
 end
 
+function BridgeAdapters.ox.addMoney(source, moneyType, amount, reason)
+    moneyType = moneyType or 'cash'
+    if moneyType == 'money' then
+        moneyType = 'cash'
+    end
+
+    local player = BridgeAdapters.ox.getPlayer(source)
+    if player and player.addMoney then
+        player.addMoney(moneyType, tonumber(amount) or 0, reason)
+        return true
+    end
+
+    return false
+end
+
+function BridgeAdapters.ox.removeMoney(source, moneyType, amount, reason)
+    moneyType = moneyType or 'cash'
+    if moneyType == 'money' then
+        moneyType = 'cash'
+    end
+
+    local player = BridgeAdapters.ox.getPlayer(source)
+    if not player or not player.removeMoney then
+        return false
+    end
+
+    local currentMoney = BridgeAdapters.ox.getMoney(source, moneyType) or 0
+    if currentMoney < (tonumber(amount) or 0) then
+        return false
+    end
+
+    player.removeMoney(moneyType, tonumber(amount) or 0, reason)
+    return true
+end
+
 function BridgeAdapters.ox.hasItem(source, itemName, amount)
     amount = amount or 1
 

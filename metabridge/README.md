@@ -82,7 +82,12 @@ Important: `init.lua` force-sets `BridgeConfig.debug = true`.
 - `getPlayerData(source:number) -> table|nil`
 - `getIdentifier(source:number) -> string|nil`
 - `getJob(source:number) -> table|nil`
+- `getGang(source:number) -> table|nil`
+- `getMetadata(source:number, key:string|nil) -> any|nil`
 - `getMoney(source:number, moneyType:string|nil) -> number|nil`
+- `setPlayerMetadata(source:number, key:string, value:any) -> boolean`
+- `addMoney(source:number, moneyType:string|nil, amount:number, reason:string|nil) -> boolean`
+- `removeMoney(source:number, moneyType:string|nil, amount:number, reason:string|nil) -> boolean`
 
 ### Inventory
 
@@ -125,7 +130,14 @@ Important: `init.lua` force-sets `BridgeConfig.debug = true`.
 - `getPlayerData() -> table|nil`
 - `getIdentifier() -> string|nil`
 - `getJob() -> table|nil`
+- `getGang() -> table|nil`
+- `getMetadata(key:string|nil) -> any|nil`
 - `onPlayerLoaded(handler:function) -> boolean`
+- `onPlayerUnloaded(handler:function) -> boolean`
+- `onPlayerDataChanged(handler:function) -> boolean`
+- `onJobChanged(handler:function) -> boolean`
+- `onGangChanged(handler:function) -> boolean`
+- `onMetadataChanged(handler:function) -> boolean`
 
 ### Vehicle / Entity
 

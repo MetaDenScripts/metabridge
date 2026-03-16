@@ -14,6 +14,40 @@ local function getCore()
     return QBCore
 end
 
+local cachedJobDefinitions = nil
+
+local function loadJobDefinitions()
+    if cachedJobDefinitions ~= nil then
+        return cachedJobDefinitions or nil
+    end
+
+    local fileContents = LoadResourceFile('qb-core', 'shared/jobs.lua')
+    if type(fileContents) ~= 'string' or fileContents == '' then
+        cachedJobDefinitions = false
+        return nil
+    end
+
+    local chunk, loadError = load(fileContents, '@qb-core/shared/jobs.lua', 't', {})
+    if not chunk then
+        BridgeShared.debug('adapter.qbcore', 'Failed to parse shared/jobs.lua', { error = tostring(loadError) })
+        cachedJobDefinitions = false
+        return nil
+    end
+
+    local success, jobs = pcall(chunk)
+    if not success or type(jobs) ~= 'table' then
+        BridgeShared.debug('adapter.qbcore', 'Failed to evaluate shared/jobs.lua', {
+            success = success,
+            resultType = type(jobs)
+        })
+        cachedJobDefinitions = false
+        return nil
+    end
+
+    cachedJobDefinitions = jobs
+    return jobs
+end
+
 local function generatePlate()
     if lib and lib.string and lib.string.random then
         return lib.string.random('........'):upper()
@@ -86,6 +120,44 @@ function BridgeAdapters.qbcore.getJob(source)
     return job
 end
 
+function BridgeAdapters.qbcore.getJobDefinitions()
+    return loadJobDefinitions()
+end
+
+function BridgeAdapters.qbcore.getGang(source)
+    local player = BridgeAdapters.qbcore.getPlayer(source)
+    local gang = BridgeShared.resolveGangData(player)
+    if gang ~= nil then
+        return gang
+    end
+
+    local playerData = BridgeAdapters.qbcore.getPlayerData(source)
+    return BridgeShared.resolveGangData(playerData)
+end
+
+function BridgeAdapters.qbcore.getMetadata(source, key)
+    local playerData = BridgeAdapters.qbcore.getPlayerData(source)
+    local metadata = type(playerData) == 'table' and playerData.metadata or nil
+    if type(metadata) ~= 'table' then
+        return nil
+    end
+
+    if type(key) ~= 'string' or key == '' then
+        return metadata
+    end
+
+    local current = metadata
+    for segment in key:gmatch('[^%.]+') do
+        if type(current) ~= 'table' then
+            return nil
+        end
+
+        current = current[segment]
+    end
+
+    return current
+end
+
 function BridgeAdapters.qbcore.getMoney(source, moneyType)
     local player = BridgeAdapters.qbcore.getPlayer(source)
     local playerData = player and player.PlayerData or nil
@@ -104,6 +176,44 @@ function BridgeAdapters.qbcore.getMoney(source, moneyType)
     end
 
     return playerData.money[moneyType]
+end
+
+function BridgeAdapters.qbcore.setPlayerMetadata(source, key, value)
+    local player = BridgeAdapters.qbcore.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.SetMetaData then
+        return false
+    end
+
+    player.Functions.SetMetaData(key, value)
+    return true
+end
+
+function BridgeAdapters.qbcore.addMoney(source, moneyType, amount, reason)
+    local player = BridgeAdapters.qbcore.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.AddMoney then
+        return false
+    end
+
+    moneyType = moneyType or 'cash'
+    if moneyType == 'money' then
+        moneyType = 'cash'
+    end
+
+    return player.Functions.AddMoney(moneyType, tonumber(amount) or 0, reason) == true
+end
+
+function BridgeAdapters.qbcore.removeMoney(source, moneyType, amount, reason)
+    local player = BridgeAdapters.qbcore.getPlayer(source)
+    if not player or not player.Functions or not player.Functions.RemoveMoney then
+        return false
+    end
+
+    moneyType = moneyType or 'cash'
+    if moneyType == 'money' then
+        moneyType = 'cash'
+    end
+
+    return player.Functions.RemoveMoney(moneyType, tonumber(amount) or 0, reason) == true
 end
 
 function BridgeAdapters.qbcore.hasItem(source, itemName, amount)

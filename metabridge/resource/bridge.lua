@@ -5,6 +5,39 @@ local activeFramework = nil
 local overrides = {}
 local fallbackCallbacks = {}
 
+local function trim(value)
+    if type(value) ~= 'string' then
+        return ''
+    end
+
+    return value:match('^%s*(.-)%s*$') or ''
+end
+
+local function resolveGradeLevel(job)
+    if type(job) ~= 'table' then
+        return 0
+    end
+
+    local grade = job.grade
+    if type(grade) == 'number' then
+        return math.floor(grade)
+    end
+
+    if type(grade) == 'table' then
+        if type(grade.level) == 'number' then
+            return math.floor(grade.level)
+        end
+
+        if type(grade.grade) == 'number' then
+            return math.floor(grade.grade)
+        end
+
+        return math.floor(tonumber(grade.level or grade.grade or 0) or 0)
+    end
+
+    return math.floor(tonumber(job.grade or job.level or 0) or 0)
+end
+
 local function isCallable(value)
     local valueType = type(value)
     if valueType == 'function' then
@@ -135,8 +168,123 @@ function MetaBridge.getJob(source)
     return fallbackJob
 end
 
+function MetaBridge.getPlayerName(source)
+    local playerData = MetaBridge.getPlayerData(source)
+    if type(playerData) == 'table' then
+        local charInfo = playerData.charinfo
+        if type(charInfo) == 'table' and charInfo.firstname and charInfo.lastname then
+            return ('%s %s'):format(charInfo.firstname, charInfo.lastname)
+        end
+
+        if type(playerData.name) == 'string' and playerData.name ~= '' then
+            return playerData.name
+        end
+    end
+
+    return GetPlayerName(source) or ('Player %s'):format(source)
+end
+
+function MetaBridge.getPlayerGradeLevel(source)
+    return resolveGradeLevel(MetaBridge.getJob(source))
+end
+
+function MetaBridge.isPlayerJobBoss(source)
+    local job = MetaBridge.getJob(source)
+    if type(job) ~= 'table' then
+        return false
+    end
+
+    if job.isboss == true then
+        return true
+    end
+
+    local grade = job.grade
+    return type(grade) == 'table' and grade.isboss == true or false
+end
+
+function MetaBridge.getGang(source)
+    if not activeAdapter then
+        MetaBridge.init()
+    end
+
+    local gang = activeAdapter and activeAdapter.getGang and activeAdapter.getGang(source) or nil
+    if gang ~= nil then
+        return gang
+    end
+
+    local playerData = MetaBridge.getPlayerData(source)
+    return BridgeShared.resolveGangData(playerData)
+end
+
+function MetaBridge.getMetadata(source, key)
+    if not activeAdapter then
+        MetaBridge.init()
+    end
+
+    local metadata = activeAdapter and activeAdapter.getMetadata and activeAdapter.getMetadata(source, key) or nil
+    if metadata ~= nil then
+        return metadata
+    end
+
+    local playerData = MetaBridge.getPlayerData(source)
+    if type(playerData) ~= 'table' or type(playerData.metadata) ~= 'table' then
+        return nil
+    end
+
+    if type(key) ~= 'string' or key == '' then
+        return playerData.metadata
+    end
+
+    local current = playerData.metadata
+    for segment in key:gmatch('[^%.]+') do
+        if type(current) ~= 'table' then
+            return nil
+        end
+
+        current = current[segment]
+    end
+
+    return current
+end
+
 function MetaBridge.getMoney(source, moneyType)
     return MetaBridge.call('getMoney', source, moneyType)
+end
+
+function MetaBridge.setPlayerMetadata(source, key, value)
+    if not activeAdapter then
+        MetaBridge.init()
+    end
+
+    if not activeAdapter or not activeAdapter.setPlayerMetadata then
+        return false
+    end
+
+    return activeAdapter.setPlayerMetadata(source, key, value)
+end
+
+function MetaBridge.addMoney(source, moneyType, amount, reason)
+    if not activeAdapter then
+        MetaBridge.init()
+    end
+
+    if not activeAdapter or not activeAdapter.addMoney then
+        return false
+    end
+
+    return activeAdapter.addMoney(source, moneyType, amount, reason)
+end
+
+function MetaBridge.removeMoney(source, moneyType, amount, reason)
+    if not activeAdapter then
+        MetaBridge.init()
+    end
+
+    if not activeAdapter or not activeAdapter.removeMoney then
+        return false
+    end
+
+    return activeAdapter.removeMoney(source, moneyType, amount, reason)
 end
 
 function MetaBridge.hasItem(source, itemName, amount)
@@ -177,6 +325,15 @@ function MetaBridge.getItemDefinition(source, itemName)
     end
 
     return nil
+end
+
+function MetaBridge.getItemLabel(source, itemName)
+    local definition = MetaBridge.getItemDefinition(source or 0, itemName)
+    if type(definition) == 'table' and type(definition.label) == 'string' and definition.label ~= '' then
+        return definition.label
+    end
+
+    return itemName
 end
 
 function MetaBridge.getItemCount(source, itemName, meta)
@@ -353,6 +510,21 @@ function MetaBridge.canCarryWeight(source, weight)
     return true
 end
 
+function MetaBridge.canCarryItem(source, itemName, amount)
+    amount = math.max(0, math.floor(tonumber(amount) or 0))
+    if amount <= 0 then
+        return true
+    end
+
+    local definition = MetaBridge.getItemDefinition(source, itemName)
+    local itemWeight = type(definition) == 'table' and tonumber(definition.weight or definition.grams) or nil
+    if not itemWeight or itemWeight <= 0 then
+        return true
+    end
+
+    return MetaBridge.canCarryWeight(source, itemWeight * amount) ~= false
+end
+
 function MetaBridge.getEmptySlot(source)
     if BridgeInventory and BridgeInventory.call then
         local result = BridgeInventory.call('getEmptySlot', source)
@@ -447,11 +619,9 @@ if IsDuplicityVersion and IsDuplicityVersion() then
 
         local handler = fallbackCallbacks[callbackName]
         if type(handler) ~= 'function' then
-            BridgeShared.debug('server.callback', 'Fallback callback missing', { callbackName = callbackName })
-            TriggerClientEvent('MetaBridge:callbackResponse', src, requestId, false, {
-                n = 1,
-                [1] = ('callback %s does not exist'):format(callbackName)
-            })
+            -- Silently return: another resource's Lua state that owns this callback
+            -- will respond. Sending an error here would race-condition the real response.
+            BridgeShared.debug('server.callback', 'Fallback callback missing in this state, ignoring', { callbackName = callbackName })
             return
         end
 
@@ -500,6 +670,14 @@ if IsDuplicityVersion and IsDuplicityVersion() then
 
         MetaBridge.registerCallback('MetaBridge:getJob', function(source)
             return MetaBridge.getJob(source)
+        end)
+
+        MetaBridge.registerCallback('MetaBridge:getGang', function(source)
+            return MetaBridge.getGang(source)
+        end)
+
+        MetaBridge.registerCallback('MetaBridge:getMetadata', function(source, key)
+            return MetaBridge.getMetadata(source, key)
         end)
 
         MetaBridge.registerCallback('MetaBridge:getItemCount', function(source, itemName, meta)

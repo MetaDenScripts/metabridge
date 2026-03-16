@@ -84,6 +84,41 @@ function BridgeShared.resolveJobData(data)
     return nil
 end
 
+function BridgeShared.resolveGangData(data)
+    if type(data) ~= 'table' then
+        return nil
+    end
+
+    if data.gang ~= nil then
+        return data.gang
+    end
+
+    if data.PlayerData and type(data.PlayerData) == 'table' and data.PlayerData.gang ~= nil then
+        return data.PlayerData.gang
+    end
+
+    if data.playerData and type(data.playerData) == 'table' and data.playerData.gang ~= nil then
+        return data.playerData.gang
+    end
+
+    if data.groups and type(data.groups) == 'table' then
+        if data.groups.gang ~= nil then
+            return data.groups.gang
+        end
+
+        for groupName, groupData in pairs(data.groups) do
+            if type(groupData) == 'table' and (groupData.label ~= nil or groupData.grade ~= nil or groupData.level ~= nil) then
+                if type(groupName) == 'string' and groupData.name == nil then
+                    groupData.name = groupName
+                end
+                return groupData
+            end
+        end
+    end
+
+    return nil
+end
+
 function BridgeShared.getExportFunction(resourceName, methodName, requireStarted)
     if requireStarted ~= false and BridgeShared.isStarted and not BridgeShared.isStarted(resourceName) then
         return nil

@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'Ianarosh | MetaDen Scripts'
 description 'MetaDen Scripts | Bridge implementation to support various frameworks and inventories.'
-version '1.0.3'
+version '1.0.4'
 
 shared_scripts {
     '@ox_lib/init.lua',
@@ -20,6 +20,7 @@ client_scripts {
 
 server_scripts {
     'resource/bridge.lua',
+    'resource/jobs.lua',
     'resource/inventory.lua',
     'links/dispatch/server.lua',
     'links/frameworks/*.lua',
