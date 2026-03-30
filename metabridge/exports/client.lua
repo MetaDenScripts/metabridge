@@ -57,6 +57,8 @@ local alwaysExport = {
     'addTargetModel',
     'addTargetBoxZone',
     'addTargetSphereZone',
+    'addTargetGlobalPlayer',
+    'addTargetGlobalVehicle',
     'removeTargetZone',
     'removeTargetModel',
     'addTargetLocalEntity',

@@ -653,6 +653,28 @@ local function targetExport(resourceName, methodName)
     return BridgeShared.getExportFunction(resourceName, methodName, false)
 end
 
+local function normalizeGlobalTargetOptions(options)
+    if type(options) ~= 'table' then
+        return {}, 2.5
+    end
+
+    if options[1] ~= nil then
+        local distance = 2.5
+        local normalized = {}
+
+        for index, option in ipairs(options) do
+            normalized[index] = option
+            if type(option) == 'table' and tonumber(option.distance) and option.distance > distance then
+                distance = option.distance
+            end
+        end
+
+        return normalized, distance
+    end
+
+    return { options }, tonumber(options.distance) or 2.5
+end
+
 function MetaBridgeClient.addTargetBoxZone(data)
     if BridgeConfig and BridgeConfig.target and BridgeConfig.target.addBoxZone then
         return BridgeConfig.target.addBoxZone(data)
@@ -835,6 +857,54 @@ function MetaBridgeClient.addTargetLocalEntity(entity, options)
 
     if exports and exports['qb-target'] and exports['qb-target'].AddTargetEntity then
         exports['qb-target']:AddTargetEntity(entity, { options = options, distance = 2.5 })
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.addTargetGlobalVehicle(options)
+    if BridgeConfig and BridgeConfig.target and BridgeConfig.target.addGlobalVehicle then
+        return BridgeConfig.target.addGlobalVehicle(options)
+    end
+
+    if exports and exports.ox_target and exports.ox_target.addGlobalVehicle then
+        exports.ox_target:addGlobalVehicle(options)
+        return true
+    end
+
+    if exports and exports.qtarget and exports.qtarget.AddGlobalVehicle then
+        exports.qtarget:AddGlobalVehicle({ options = { options }, distance = options.distance or 2.5 })
+        return true
+    end
+
+    if exports and exports['qb-target'] and exports['qb-target'].AddGlobalVehicle then
+        exports['qb-target']:AddGlobalVehicle({ options = { options }, distance = options.distance or 2.5 })
+        return true
+    end
+
+    return false
+end
+
+function MetaBridgeClient.addTargetGlobalPlayer(options)
+    if BridgeConfig and BridgeConfig.target and BridgeConfig.target.addGlobalPlayer then
+        return BridgeConfig.target.addGlobalPlayer(options)
+    end
+
+    if exports and exports.ox_target and exports.ox_target.addGlobalPlayer then
+        exports.ox_target:addGlobalPlayer(options)
+        return true
+    end
+
+    local normalizedOptions, distance = normalizeGlobalTargetOptions(options)
+
+    if exports and exports.qtarget and exports.qtarget.AddGlobalPlayer then
+        exports.qtarget:AddGlobalPlayer({ options = normalizedOptions, distance = distance })
+        return true
+    end
+
+    if exports and exports['qb-target'] and exports['qb-target'].AddGlobalPlayer then
+        exports['qb-target']:AddGlobalPlayer({ options = normalizedOptions, distance = distance })
         return true
     end
 

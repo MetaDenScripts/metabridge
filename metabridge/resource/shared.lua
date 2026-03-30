@@ -139,6 +139,13 @@ function BridgeShared.getExportFunction(resourceName, methodName, requireStarted
     return function(...)
         local args = { ... }
 
+        local invokeOkWithSelf, resultWithSelf = pcall(function()
+            return fn(resource, table.unpack(args))
+        end)
+        if invokeOkWithSelf and resultWithSelf ~= nil then
+            return resultWithSelf
+        end
+
         local invokeOk, result = pcall(function()
             return fn(table.unpack(args))
         end)
@@ -146,9 +153,6 @@ function BridgeShared.getExportFunction(resourceName, methodName, requireStarted
             return result
         end
 
-        local invokeOkWithSelf, resultWithSelf = pcall(function()
-            return fn(resource, table.unpack(args))
-        end)
         if invokeOkWithSelf then
             return resultWithSelf
         end

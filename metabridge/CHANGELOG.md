@@ -1,3 +1,26 @@
+## [1.0.5] - 2026-03-30
+
+### Added
+- **Dispatch abstraction system** — unified client/server dispatch layer with auto-detection and adapter routing:
+  - `sendDispatch(data)` (client) — sends a dispatch alert through the detected (or configured) dispatch system. Supports `ps-dispatch`, `qs-dispatch`, `rcore_dispatch`, `cd_dispatch`, and a built-in standalone relay out of the box.
+  - Standalone server relay — receives `MetaBridge:dispatch:sendAlert` and broadcasts `MetaBridge:dispatch:clientAlert` to all clients with blip creation and feed notification.
+  - `detectDispatch()` / `normalizeDispatch(name)` (shared) — auto-detection and alias normalization for dispatch systems, matching the existing framework and inventory detection pattern.
+  - Full `BridgeConfig.dispatch` support: `system` (force a specific adapter), `send` (custom send handler), `filter` (client-side display filter), `filterServer` (server-side relay filter).
+- Client bridge methods:
+  - `addTargetGlobalVehicle(options)` — adds target options to all vehicles globally; routes to `ox_target`, `qb-target`, or `qtarget`.
+  - `addTargetGlobalPlayer(options)` — adds target options to all players globally; same fallback chain.
+  - `getItemImage(itemName)` — resolves an item's image URL; defaults to the `ox_inventory` NUI image path, overridable via `BridgeConfig.inventory.getItemImage`.
+- Server bridge methods:
+  - `getPlayerName(source)` — resolves the character's full name from `charinfo` (firstname + lastname), falling back to `playerData.name` then native `GetPlayerName`.
+  - `canCarryItem(source, itemName, amount)` — checks whether a player can carry a given quantity of an item by looking up its weight via `getItemDefinition` and delegating to `canCarryWeight`.
+  - `getItemFromSlot(source, slot)` — retrieves item data from a specific inventory slot via the active inventory adapter.
+
+### Compatibility
+- Public exports, events, and method signatures remain unchanged.
+- Both resource mode and `@metabridge/init.lua` include mode remain supported.
+
+---
+
 ## [1.0.4] - 2026-03-03
 
 ### Fixed

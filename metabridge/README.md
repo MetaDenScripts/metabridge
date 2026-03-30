@@ -170,6 +170,7 @@ Important: `init.lua` force-sets `BridgeConfig.debug = true`.
 - `addTargetModel(models:any, options:table) -> boolean`
 - `addTargetBoxZone(data:table) -> any`
 - `addTargetSphereZone(data:table) -> any`
+- `addTargetGlobalPlayer(options:table) -> boolean`
 - `removeTargetZone(zoneId:string|number) -> boolean`
 - `removeTargetModel(models:any) -> boolean`
 - `addTargetLocalEntity(entity:number, options:table) -> boolean`

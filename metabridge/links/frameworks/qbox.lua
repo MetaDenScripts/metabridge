@@ -358,12 +358,13 @@ function BridgeAdapters.qbox.createOwnedVehicle(request)
         props = request.props
     }
 
-    local vehicleId = exports.qbx_vehicles:CreatePlayerVehicle(createRequest)
-    if not vehicleId then
+    local okCreate, vehicleId = pcall(function() return exports.qbx_vehicles:CreatePlayerVehicle(createRequest) end)
+    if not okCreate or not vehicleId then
         return nil
     end
 
-    local ownedVehicle = exports.qbx_vehicles:GetPlayerVehicle(vehicleId)
+    local okGet, ownedVehicle = pcall(function() return exports.qbx_vehicles:GetPlayerVehicle(vehicleId) end)
+    if not okGet then ownedVehicle = nil end
     if not ownedVehicle then
         return {
             id = vehicleId,
@@ -391,8 +392,8 @@ function BridgeAdapters.qbox.getOwnedVehicle(lookup)
         return nil
     end
 
-    local ownedVehicle = exports.qbx_vehicles:GetPlayerVehicle(vehicleId)
-    if not ownedVehicle then
+    local okVeh, ownedVehicle = pcall(function() return exports.qbx_vehicles:GetPlayerVehicle(vehicleId) end)
+    if not okVeh or not ownedVehicle then
         return nil
     end
 

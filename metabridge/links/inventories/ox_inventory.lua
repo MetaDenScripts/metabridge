@@ -5,17 +5,25 @@ InventoryAdapters.ox_inventory = {
 }
 
 local function callExport(resourceName, methodName, ...)
-    if not exports or not exports[resourceName] then
+    if not BridgeShared or not BridgeShared.isStarted or not BridgeShared.isStarted(resourceName) then
         return nil
     end
 
     local resource = exports[resourceName]
-    local fn = resource[methodName]
-    if type(fn) ~= 'function' then
+    local ok, fn = pcall(function() return resource[methodName] end)
+    if not ok or type(fn) ~= 'function' then
         return nil
     end
 
-    return fn(resource, ...)
+    local args = table.pack(...)
+    local invokeOk, result = pcall(function()
+        return fn(resource, table.unpack(args, 1, args.n))
+    end)
+    if not invokeOk then
+        return nil
+    end
+
+    return result
 end
 
 function InventoryAdapters.ox_inventory.getItemData(source, itemName, meta)
