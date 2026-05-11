@@ -329,7 +329,9 @@ local inventoryAliases = {
     ['ak47'] = 'ak47_inventory',
     ['ak47_inventory'] = 'ak47_inventory',
     ['origen'] = 'origen_inventory',
-    ['origen_inventory'] = 'origen_inventory'
+    ['origen_inventory'] = 'origen_inventory',
+    ['jaksam'] = 'jaksam_inventory',
+    ['jaksam_inventory'] = 'jaksam_inventory'
 }
 
 function BridgeShared.normalizeInventory(name)
@@ -343,6 +345,10 @@ end
 
 function BridgeShared.detectInventory()
     local candidates = {
+        -- jaksam_inventory must be checked before ox_inventory because jaksam can run
+        -- with an ox_inventory compatibility shim that also starts the ox_inventory
+        -- resource, which would otherwise cause the wrong adapter to be selected.
+        { resource = 'jaksam_inventory', name = 'jaksam_inventory' },
         { resource = 'ox_inventory', name = 'ox_inventory' },
         { resource = 'qs-inventory', name = 'qs-inventory' },
         { resource = 'ps-inventory', name = 'ps-inventory' },
