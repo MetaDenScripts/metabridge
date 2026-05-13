@@ -48,6 +48,7 @@ if IsDuplicityVersion() then
     loadFile('links/inventories/core_inventory.lua')
     loadFile('links/inventories/origen_inventory.lua')
     loadFile('links/inventories/ak47_inventory.lua')
+    loadFile('links/inventories/jaksam_inventory.lua')
 
     loadFile('exports/server.lua')
 else

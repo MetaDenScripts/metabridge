@@ -106,6 +106,19 @@ function jaksamInventory.getItemFromSlot(source, slot)
     return { name = item.name, metadata = item.metadata }
 end
 
+-- canCarryItem: uses jaksam's native export that checks BOTH weight AND slot limits
+-- simultaneously.  This is the preferred path; canCarryWeight is kept as a fallback
+-- for callers that only have a raw weight value available.
+function jaksamInventory.canCarryItem(source, itemName, amount)
+    amount = math.max(1, math.floor(tonumber(amount) or 1))
+    local result = callExport('canCarryItem', source, itemName, amount)
+    if type(result) == 'boolean' then
+        return result
+    end
+    -- If the export is unavailable, fall back to the weight+slot check below.
+    return nil
+end
+
 -- canCarryWeight: queries the live inventory to compare currentWeight + proposed weight
 -- against the inventory's maxWeight.  This is necessary because jaksam does not expose
 -- a CanCarryWeight export (unlike ox_inventory), and its ox_inventory compatibility shim

@@ -516,6 +516,15 @@ function MetaBridge.canCarryItem(source, itemName, amount)
         return true
     end
 
+    -- Prefer a native canCarryItem from the active inventory adapter (e.g. jaksam_inventory)
+    -- which can check weight + slots together without needing a weight definition lookup.
+    if BridgeInventory and BridgeInventory.call then
+        local nativeResult = BridgeInventory.call('canCarryItem', source, itemName, amount)
+        if nativeResult ~= nil then
+            return nativeResult ~= false
+        end
+    end
+
     local definition = MetaBridge.getItemDefinition(source, itemName)
     local itemWeight = type(definition) == 'table' and tonumber(definition.weight or definition.grams) or nil
     if not itemWeight or itemWeight <= 0 then
